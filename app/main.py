@@ -412,13 +412,14 @@ async def home(request: Request):
     except Exception:
         static_version = int(time.time())
     return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "title": "HERMATRON - Chat Multiusos", "static_version": static_version},
+        request=request,
+        name="index.html",
+        context={"request": request, "title": "HERMATRON - Chat Multiusos", "static_version": static_version},
     )
 
 @app.get("/videos", response_class=HTMLResponse)
 async def video_studio(request: Request):
-    return templates.TemplateResponse("video-studio.html", {"request": request, "title": "HERMATRON - Estudio de Video"})
+    return templates.TemplateResponse(request=request, name="video-studio.html", context={"request": request, "title": "HERMATRON - Estudio de Video"})
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
