@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <!-- CACHE BUSTER: v5 -->
+    <link rel="stylesheet" href="/static/styles.css?v=5">
+    <link rel="stylesheet" href="/static/video-studio.css?v=4">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="studio-mode">
+    <div class="studio-wrapper">
+        <!-- Top Bar Integrada -->
+        <nav class="studio-topbar">
+            <a href="/" class="studio-logo" title="Volver al Inicio">
+                <span class="logo-h">H</span>
+                <div class="logo-text">
+                    <h1>HERMATRON</h1>
+                    <span>Estudio de Video Profesional</span>
+                </div>
+            </a>
+            
+            <div class="studio-status">
+                <span class="status-dot" id="connectionStatus"></span>
+                <span id="statusText">Conectando...</span>
+            </div>
+
+            <div class="studio-actions-top">
+                <a href="/" class="btn btn-nav">💬 Chat</a>
+                <button class="btn btn-secondary" onclick="document.getElementById('fileImportVideo').click()">📂 Importar</button>
+                <input type="file" id="fileImportVideo" accept="video/*" style="display:none" onchange="importarVideoLocalStudio(this.files[0])">
+                <button class="btn btn-warning btn-sm" onclick="limpiarCache()">🧹 Caché</button>
+                <button class="btn btn-secondary btn-sm" onclick="limpiarGaleria()">🗑️ Limpiar</button>
+            </div>
+        </nav>
+
+        <div class="studio-layout">
+            <!-- Columna Izquierda: Formulario -->
+            <aside class="studio-sidebar">
+                <div class="sidebar-section">
+                    <h3>🎬 Crear Nuevo Video</h3>
+
+                    <div class="form-group">
+                        <label for="videoTema">📋 Tema del Video</label>
+                        <input type="text" id="videoTema" placeholder="Ej: Comercial de Coca-Cola" class="input-form">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="videoPrompt">🔥 Descripción y Escenas</label>
+                        <textarea id="videoPrompt" placeholder="Describe detalladamente lo que quieres ver..." class="textarea-form"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>📐 Formato del Video</label>
+                        <div class="ratio-selector">
+                            <label class="ratio-option">
+                                <input type="radio" name="ratio" value="16:9" checked onchange="actualizarRatioPreview()">
+                                <div class="ratio-box ratio-16-9">
+                                    <span>16:9 YouTube</span>
+                                </div>
+                            </label>
+                            <label class="ratio-option">
+                                <input type="radio" name="ratio" value="9:16" onchange="actualizarRatioPreview()">
+                                <div class="ratio-box ratio-9-16">
+                                    <span>9:16 Shorts/Reels</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="switch-group">
+                            <label>🔊 Narración por Voz IA</label>
+                            <label class="switch">
+                                <input type="checkbox" id="checkNarracion" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        
+                        <div id="vozSelector" class="voz-selector-container">
+                            <p class="small-label">Escoge la voz para el video:</p>
+                            <input type="hidden" id="vozSeleccionada" value="es-CO-GonzaloNeural">
+                            <div id="vozLista" class="voz-lista-scroll">
+                                <!-- Voces disponibles -->
+                                <div class="voz-item activo" data-voz="es-CO-GonzaloNeural" onclick="seleccionarVoz('es-CO-GonzaloNeural')">
+                                    <div class="voz-item-info">
+                                        <span class="voz-item-nombre">🇨🇴 Gonzalo (Claro)</span>
+                                        <span class="voz-item-region">Colombia - Recomendado</span>
+                                    </div>
+                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-CO-GonzaloNeural', this)">▶️</button>
+                                </div>
+                                <div class="voz-item" data-voz="es-MX-JorgeNeural" onclick="seleccionarVoz('es-MX-JorgeNeural')">
+                                    <div class="voz-item-info">
+                                        <span class="voz-item-nombre">🇲🇽 Jorge (Realista)</span>
+                                        <span class="voz-item-region">México</span>
+                                    </div>
+                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-MX-JorgeNeural', this)">▶️</button>
+                                </div>
+                                <div class="voz-item" data-voz="es-ES-LuciaNeural" onclick="seleccionarVoz('es-ES-LuciaNeural')">
+                                    <div class="voz-item-info">
+                                        <span class="voz-item-nombre">🇪🇸 Lucía (Clara)</span>
+                                        <span class="voz-item-region">España</span>
+                                    </div>
+                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-ES-LuciaNeural', this)">▶️</button>
+                                </div>
+                                <div class="voz-item" data-voz="es-AR-TomasNeural" onclick="seleccionarVoz('es-AR-TomasNeural')">
+                                    <div class="voz-item-info">
+                                        <span class="voz-item-nombre">🇦🇷 Tomás (Dinámico)</span>
+                                        <span class="voz-item-region">Argentina</span>
+                                    </div>
+                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-AR-TomasNeural', this)">▶️</button>
+                                </div>
+                                <div class="voz-item" data-voz="es-ES-AlvaroNeural" onclick="seleccionarVoz('es-ES-AlvaroNeural')">
+                                    <div class="voz-item-info">
+                                        <span class="voz-item-nombre">🇪🇸 Álvaro (Profesional)</span>
+                                        <span class="voz-item-region">España</span>
+                                    </div>
+                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-ES-AlvaroNeural', this)">▶️</button>
+                                </div>
+                                <div class="voz-item" data-voz="pNInz6obpgDQGcFmaJgB" onclick="seleccionarVoz('pNInz6obpgDQGcFmaJgB')">
+                                    <div class="voz-item-info">
+                                        <span class="voz-item-nombre">💎 Adam (Premium)</span>
+                                        <span class="voz-item-region">ElevenLabs</span>
+                                    </div>
+                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('pNInz6obpgDQGcFmaJgB', this)">▶️</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-crear-video-studio" onclick="crearVideoDesdeStudio()">
+                        🚀 Crear Video Profesional
+                    </button>
+                </div>
+
+                <div class="sidebar-tips">
+                    <p>💡 <strong>Tip:</strong> Describe los colores, el tipo de cámara (macro, dron) y la emoción para un video increíble.</p>
+                </div>
+            </aside>
+
+            <!-- Columna Central: Preview -->
+            <main class="studio-main">
+                <div class="preview-header">
+                    <h2>📺 Vista Previa</h2>
+                    <span class="badge-ratio" id="previewRatioBadge">16:9</span>
+                </div>
+
+                <!-- Barra de Progreso (Visible solo al crear) -->
+                <div id="studioProgreso" class="studio-progress-overlay" style="display:none">
+                    <div class="progress-card">
+                        <div class="spinner"></div>
+                        <div class="progress-info">
+                            <p id="progresoEstado">🧠 Analizando tema...</p>
+                            <div class="progress-bar-wrap">
+                                <div id="progresoFill" class="progress-bar-fill"></div>
+                            </div>
+                            <span id="progresoPorcentaje">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="studio-preview-container">
+                    <div id="previewPlaceholder" class="preview-placeholder">
+                        <div class="placeholder-icon">🎬</div>
+                        <p>Ingresa los datos a la izquierda y pulsa <strong>Crear Video</strong></p>
+                        <p class="small">El video aparecerá aquí cuando esté listo.</p>
+                    </div>
+
+                    <div id="previewVideoWrap" class="video-player-container" style="display:none">
+                        <div id="previewLoading" class="video-loading">
+                            <div class="spinner-small"></div>
+                            <span>Cargando video...</span>
+                        </div>
+                        <video id="previewVideo" class="video-player" controls preload="auto">
+                            Tu navegador no soporta videos.
+                        </video>
+                        <div id="pauseOverlay" class="video-pause-overlay" onclick="togglePausePreview()">
+                            <span id="pauseOverlayIcon">▶️</span>
+                        </div>
+                    </div>
+
+                    <div id="previewActions" class="preview-actions-bar" style="display:none">
+                        <div class="video-info-mini">
+                            <h4 id="videoInfoTema">-</h4>
+                            <div class="video-meta-inline">
+                                <span id="videoMetaFecha">📅 -</span>
+                                <span id="videoMetaTamano">📦 -</span>
+                                <span id="videoMetaEscenas">🎬 -</span>
+                            </div>
+                        </div>
+                        <div class="video-buttons">
+                            <button class="btn btn-secondary btn-sm" onclick="reproducirPreview()">▶️ Play</button>
+                            <div class="export-group">
+                                <select id="exportResolution" class="select-sm">
+                                    <option value="720">720p (HD)</option>
+                                    <option value="1080" selected>1080p (FHD)</option>
+                                    <option value="1920">1920 (2K)</option>
+                                    <option value="2160">4K (UHD)</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm" onclick="descargarVideoActual()">⬇️ Web</button>
+                                <button class="btn btn-success btn-sm" onclick="guardarEnPC()">💾 Guardar en PC</button>
+                            </div>
+                            <button class="btn btn-warning btn-sm" onclick="descargarIDMActual()">📥 IDM</button>
+                            <button class="btn btn-danger btn-sm" onclick="eliminarVideoActual()">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Columna Derecha: Biblioteca -->
+            <aside class="studio-gallery">
+                <h3 onclick="toggleSeccionGaleria('gallery-tabs')"><span>📚 Biblioteca</span> <span class="toggle-arrow">▾</span></h3>
+                
+                <div class="gallery-tabs" id="gallery-tabs">
+                    <div class="gallery-section">
+                        <h4 onclick="toggleSeccionGaleria('galleryListCreaciones')"><span>🎬 CREACIONES IA</span> <span class="toggle-arrow">▾</span></h4>
+                        <div id="galleryListCreaciones" class="gallery-scroll">
+                            <!-- JS cargará los videos aquí -->
+                        </div>
+                    </div>
+
+                    <div class="gallery-section">
+                        <h4 onclick="toggleSeccionGaleria('galleryListImportados')"><span>📂 IMPORTADOS</span> <span class="toggle-arrow">▾</span></h4>
+                        <div id="galleryListImportados" class="gallery-scroll">
+                            <!-- JS cargará los videos aquí -->
+                        </div>
+                    </div>
+
+                    <div class="gallery-section">
+                        <h4 onclick="toggleSeccionGaleria('galleryListOtros')"><span>📦 OTROS</span> <span class="toggle-arrow">▾</span></h4>
+                        <div id="galleryListOtros" class="gallery-scroll">
+                            <!-- Archivos adicionales: screenshots, recordings, etc -->
+                            <div class="gallery-empty-small" id="otrosEmptyState">
+                                <p>Sin archivos adicionales</p>
+                                <small>Los archivos MP4, MOV, AVI importados aparecerán aquí</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Estadísticas de la biblioteca -->
+                <div class="gallery-stats">
+                    <div class="stat-item">
+                        <span class="stat-icon">🎬</span>
+                        <span class="stat-value" id="statCreaciones">0</span>
+                        <span class="stat-label">IA</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">📂</span>
+                        <span class="stat-value" id="statImportados">0</span>
+                        <span class="stat-label">Import</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">📦</span>
+                        <span class="stat-value" id="statOtros">0</span>
+                        <span class="stat-label">Otros</span>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="/static/video-studio.js?v=15"></script>
+</body>
+</html>

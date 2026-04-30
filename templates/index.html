@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="icon" href="/static/hermatron.ico" type="image/x-icon">
+    <meta name="description" content="HERMATRON - Agente Creativo Profesional con IA">
+    <meta name="theme-color" content="#09090b">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Premium -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon-container">
+                        <span class="logo-icon logo-h">H</span>
+                        <div class="logo-glow"></div>
+                    </div>
+                    <div class="logo-text">
+                        <h1>HERMATRON</h1>
+                        <span class="tagline">Agente Creativo Profesional v4.0</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <div class="status-indicator">
+                        <span class="status-dot" id="connectionStatus"></span>
+                        <span id="statusText">Conectando...</span>
+                        <span class="status-model" id="statusModel" style="display: none;"></span>
+                    </div>
+                    <a href="/videos" class="btn btn-nav" title="Estudio de Video">
+                        <span class="btn-icon-text">🎬</span> Videos
+                    </a>
+                    <button class="btn btn-video" onclick="abrirModalVideo()" title="Crear Video">
+                        <span>➕</span> Nuevo
+                    </button>
+                    <button class="btn btn-secondary" onclick="togglePanel('configPanel')" title="Configuración">
+                        ⚙️ Ajustes
+                    </button>
+                    <button class="btn btn-danger-outline" id="btnLimpiar" onclick="limpiarMemoria()" title="Eliminar toda la conversación">
+                        🗑️ Limpiar
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Selector de Modos Premium -->
+        <div class="modo-selector-bar" id="modoSelector">
+            <!-- Se llena dinámicamente -->
+        </div>
+
+        
+        <!-- Layout Principal -->
+        <div class="main-layout">
+            <!-- Sidebar Izquierdo: Conversaciones -->
+            <aside class="left-sidebar" id="leftSidebar">
+                <div class="sidebar-header">
+                    <button class="btn btn-primary btn-new-chat" onclick="nuevaConversacion()">+ Nueva Conversación</button>
+                </div>
+                <div class="conversaciones-list" id="conversacionesList">
+                    <!-- Lista de conversaciones cargada con JS -->
+                </div>
+            </aside>
+            
+            <!-- Chat Container -->
+
+            <main class="chat-container" id="chatContainer">
+                <div class="welcome-message" id="welcomeMessage">
+                    <div class="welcome-icon" id="welcomeIcon">
+                        <span class="welcome-h">H</span>
+                        <div class="welcome-glow"></div>
+                    </div>
+                    <h2 id="welcomeTitle">¡Qué más, mi pana!</h2>
+                    <p id="welcomeText">Soy HERMATRON v4.0, tu agente creativo profesional. ¿En qué te puedo ayudar hoy?</p>
+                    <div class="welcome-features">
+                        <div class="feature-badge"><span>🧠</span> IA Avanzada</div>
+                        <div class="feature-badge"><span>👁️</span> Visión 4K</div>
+                        <div class="feature-badge"><span>🎙️</span> Voz Natural</div>
+                        <div class="feature-badge"><span>💾</span> Memoria</div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Panel Lateral (Config/Plantillas/Export/Video) -->
+            <aside class="side-panel" id="sidePanel" style="display: none;">
+                <div class="panel-header">
+                    <h3 id="panelTitle">Panel</h3>
+                    <button class="btn-icon" onclick="togglePanel()" title="Cerrar">✕</button>
+                </div>
+                <div class="panel-content" id="panelContent">
+                    <!-- Contenido dinámico -->
+                </div>
+            </aside>
+
+            <!-- Panel de Video (Vista Previa) -->
+            <aside class="side-panel video-preview-panel" id="videoPreviewPanel" style="display: none;">
+                <div class="panel-header">
+                    <h3>🎬 Vista Previa del Video</h3>
+                    <button class="btn-icon" onclick="cerrarVideoPreview()" title="Cerrar">✕</button>
+                </div>
+                <div class="panel-content" id="videoPreviewContent">
+                    <!-- Contenido dinámico del video -->
+                </div>
+            </aside>
+        </div>
+
+        <!-- Input Area Premium -->
+        <footer class="input-area">
+            <div class="input-container">
+                <!-- Info del modo actual -->
+                <div class="modo-actual" id="modoActual">
+                    <span class="modo-actual-icono" id="modoActualIcono">🅷</span>
+                    <span class="modo-actual-nombre" id="modoActualNombre">General</span>
+                    <span class="modo-actual-desc" id="modoActualDesc">Asistente creativo multiusos</span>
+                </div>
+
+                <div class="input-wrapper">
+                    <textarea
+                        id="userInput"
+                        placeholder="Escribe tu mensaje aquí... (Shift+Enter para salto de línea)"
+                        rows="1"
+                        spellcheck="true"
+                        lang="es"
+                        onkeydown="handleKeyDown(event)"
+                        oninput="autoResize(this)"
+                    ></textarea>
+                    <div class="input-actions">
+                        <input type="file" id="imageUpload" accept="image/*" multiple style="display:none" onchange="window.handleImageUpload(this.files)">
+                        <button class="btn-icon btn-upload" id="btnUploadImage" onclick="document.getElementById('imageUpload').click()" title="Subir imágenes (máx 7) - Soporta 4K, 2K, FullHD">
+                            🖼️
+                        </button>
+                        <div class="audio-control-wrapper">
+                            <button class="btn-icon" onclick="toggleAudio()" id="audioToggle" title="Activar/Desactivar Audio">
+                                🔊
+                            </button>
+                            <button class="btn-mini-toggle" onclick="toggleAudioSelector(event)" title="Cambiar Voz">
+                                ▴
+                            </button>
+                            <!-- Selector de Calidad de Audio Integrado -->
+                            <div class="audio-quality-selector" id="audioQualitySelector" style="display: none;">
+                                <div class="quality-option active" data-quality="edge-tts" onclick="cambiarCalidadAudio('edge-tts')">
+                                    <span class="quality-badge">🎙️</span>
+                                    <div class="quality-info">
+                                        <span class="quality-label">Jorge (México)</span>
+                                        <span class="quality-desc">GRATIS ⭐</span>
+                                    </div>
+                                </div>
+                                <div class="quality-option" data-quality="elevenlabs" onclick="cambiarCalidadAudio('elevenlabs')">
+                                    <span class="quality-badge">⭐</span>
+                                    <div class="quality-info">
+                                        <span class="quality-label">Adam (ElevenLabs)</span>
+                                        <span class="quality-desc">Premium</span>
+                                    </div>
+                                </div>
+                                <div class="quality-option" data-quality="local" onclick="cambiarCalidadAudio('local')">
+                                    <span class="quality-badge">🆓</span>
+                                    <div class="quality-info">
+                                        <span class="quality-label">Local (Windows)</span>
+                                        <span class="quality-desc">Gratis</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="enviar()" id="sendBtn">
+                            <span>Enviar</span>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Preview de imágenes subidas -->
+                <div class="image-preview-container" id="imagePreviewContainer" style="display: none;">
+                    <div class="image-preview-grid" id="imagePreviewGrid"></div>
+                    <button class="btn-clear-images" onclick="limpiarImagenes()">🗑️ Quitar imágenes</button>
+                </div>
+                <div class="input-info">
+                    <span id="typingIndicator" class="typing-indicator"></span>
+                    <span class="hint">Presiona Enter para enviar, Shift+Enter para nueva línea • Soporta imágenes 4K/2K/FullHD</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Audio Player Flotante -->
+    <div class="audio-player-flotante" id="audioPlayerFlotante" style="display: none;">
+        <div class="audio-player-header">
+            <span class="audio-icon">🔊</span>
+            <span class="audio-title" id="audioTitle">Respuesta de HERMATRON</span>
+            <button class="btn-close-audio" onclick="cerrarAudioPlayer()">✕</button>
+        </div>
+        <audio id="audioPlayer" controls autoplay style="width: 100%;">
+            Tu navegador no soporta audio HTML5.
+        </audio>
+        <div class="audio-player-controls">
+            <button class="btn-pause" id="btnPauseAudio" onclick="togglePauseAudio()">⏸️ Pausar</button>
+            <span class="audio-status" id="audioStatus">Reproduciendo...</span>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Modal Crear Video -->
+    <div class="modal-overlay" id="modalCrearVideo" style="display: none;">
+        <div class="modal-content" style="max-width: 600px; border: 1px solid var(--azul-electrico); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div class="modal-header" style="background: var(--fondo-oscuro); border-bottom: 1px solid var(--borde);">
+                <h3 style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.5rem;">🎬</span> Estudio de Creación PRO
+                </h3>
+                <button class="btn-icon" onclick="cerrarModalVideo()" title="Cerrar">✕</button>
+            </div>
+            <div class="modal-body" style="background: var(--fondo-secundario);">
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="videoTema" style="color: var(--texto); font-weight: 600;">✨ Título de la Obra *</label>
+                        <input type="text" id="videoTema" placeholder="Ej: El misterio de los agujeros negros" class="input-form" style="border: 1px solid var(--borde); background: var(--fondo-oscuro); font-size: 1.1rem; padding: 12px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="videoVoz" style="color: var(--texto); font-weight: 600;">🎙️ Locutor</label>
+                        <select id="videoVoz" class="input-form" style="border: 1px solid var(--borde); background: var(--fondo-oscuro); padding: 10px; cursor: pointer;">
+                            <optgroup label="Voces Ultra-Realistas (ElevenLabs)">
+                                <option value="pNInz6obpgDQGcFmaJgB" selected>💎 Adam (Profundo, Documental)</option>
+                                <option value="21m00Tcm4TlvDq8ikWAM">💎 Rachel (Calmada, Narrativa)</option>
+                                <option value="ErXwobaYiN019PkySvjV">💎 Antoni (Dinámico, Profesional)</option>
+                                <option value="EXAVITQu4vr4xnSDxMaL">💎 Bella (Suave, Atractiva)</option>
+                                <option value="VR6AewLTigWG4xSOukaG">💎 Arnold (Fuerte, Épico)</option>
+                            </optgroup>
+                            <optgroup label="Voces Estándar (Microsoft Neural)">
+                                <option value="es-MX-JorgeNeural">🇲🇽 Jorge (México) - Realista</option>
+                                <option value="es-CO-GonzaloNeural">🇨🇴 Gonzalo (Colombia) - Claro</option>
+                                <option value="es-ES-LuciaNeural">🇪🇸 Lucía (España) - Clara</option>
+                                <option value="es-AR-TomasNeural">🇦🇷 Tomás (Argentina) - Dinámico</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="videoEstilo" style="color: var(--texto); font-weight: 600;">🎨 Estilo Visual (IA)</label>
+                        <select id="videoEstilo" class="input-form" style="border: 1px solid var(--borde); background: var(--fondo-oscuro); padding: 10px; cursor: pointer;">
+                            <option value="cinematic">Cinematográfico 🎥</option>
+                            <option value="documentary">Documental 📺</option>
+                            <option value="anime">Anime / Ilustración 🌸</option>
+                            <option value="cyberpunk">Cyberpunk 🦾</option>
+                            <option value="minimalist">Minimalista ⚪</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="videoPrompt" style="color: var(--texto); font-weight: 600;">📜 Guion o Descripción *</label>
+                    <textarea id="videoPrompt" rows="4"
+                        placeholder="Describe de qué trata el video. Hermatron actuará como Director de Cine, escribirá el guion, generará imágenes con IA y lo narrará con la voz seleccionada."
+                        class="textarea-form" style="border: 1px solid var(--borde); background: var(--fondo-oscuro); resize: vertical;"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="videoDescripcion" style="color: var(--texto-secundario); font-size: 0.9rem;">📝 Notas para el Director (Opcional)</label>
+                    <textarea id="videoDescripcion" rows="2"
+                        placeholder="Ej: Haz que el tono sea de suspenso, usa colores oscuros..."
+                        class="textarea-form" style="border: 1px solid var(--borde); background: var(--fondo-oscuro);"></textarea>
+                </div>
+
+                <div class="modal-actions" style="margin-top: var(--spacing-lg); padding-top: var(--spacing-md); border-top: 1px solid var(--borde);">
+                    <button class="btn btn-secondary" onclick="cerrarModalVideo()" style="padding: 10px 20px;">Cancelar</button>
+                    <button class="btn btn-video" onclick="iniciarCreacionVideoPremium()" style="padding: 10px 24px; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4);">
+                        🎬 Producir Video Ahora
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Configuración -->
+    <div class="modal-overlay" id="modalConfig" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>⚙️ Configuración de HERMATRON</h3>
+                <button class="btn-icon" onclick="cerrarModalConfig()">✕</button>
+            </div>
+            <div class="modal-body" style="background: var(--fondo-secundario);">
+                <div class="config-section">
+                    <h4>🎙️ Voz Predeterminada</h4>
+                    <select id="configVoz" class="input-form" onchange="guardarConfigVoz()">
+                        <option value="es-MX-JorgeNeural">Jorge (México) - Gratis</option>
+                        <option value="es-CO-GonzaloNeural">Gonzalo (Colombia)</option>
+                        <option value="es-ES-ElviraNeural">Elvira (España)</option>
+                        <option value="es-AR-TomasNeural">Tomás (Argentina)</option>
+                    </select>
+                </div>
+                <div class="config-section">
+                    <h4>🖼️ Calidad de Imágenes</h4>
+                    <div class="config-options">
+                        <label class="config-option">
+                            <input type="radio" name="calidadImg" value="alta" checked onchange="guardarCalidadImg()">
+                            <span>Alta (4K/2K/FullHD) - Recomendado</span>
+                        </label>
+                        <label class="config-option">
+                            <input type="radio" name="calidadImg" value="media" onchange="guardarCalidadImg()">
+                            <span>Media (Balance)</span>
+                        </label>
+                        <label class="config-option">
+                            <input type="radio" name="calidadImg" value="baja" onchange="guardarCalidadImg()">
+                            <span>Baja (Rápida)</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="config-section">
+                    <h4>🎨 Tema</h4>
+                    <div class="tema-opciones">
+                        <button class="tema-btn activo" data-tema="oscuro" onclick="cambiarTema('oscuro')">🌙 Oscuro</button>
+                        <button class="tema-btn" data-tema="azul" onclick="cambiarTema('azul')">🔵 Azul</button>
+                        <button class="tema-btn" data-tema="verde" onclick="cambiarTema('verde')">🟢 Verde</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cache-buster dinámico -->
+    <script src="/static/app.js?v={{ static_version }}"></script>
+</body>
+</html>

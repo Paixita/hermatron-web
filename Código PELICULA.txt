@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Cine Panita</title>
+    <style>
+        /* Fondo oscuro estilo Netflix */
+        body {
+            background-color: #0f0f0f;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 50px;
+        }
+
+        /* Contenedor de la tarjeta */
+        .movie-card {
+            width: 200px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            position: relative;
+        }
+
+        /* Imagen de la película */
+        .movie-poster {
+            width: 100%;
+            height: 300px;
+            border-radius: 10px;
+            object-fit: cover;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: filter 0.3s ease;
+        }
+
+        /* Efecto al pasar el mouse */
+        .movie-card:hover {
+            transform: scale(1.08); /* Se agranda un poquito */
+        }
+
+        .movie-card:hover .movie-poster {
+            filter: brightness(50%); /* Se oscurece para que resalte el texto */
+        }
+
+        /* Texto de la película */
+        .movie-info {
+            margin-top: 10px;
+        }
+
+        .movie-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis; /* Corta el texto si es muy largo */
+        }
+
+        .movie-year {
+            font-size: 14px;
+            color: #b3b3b3;
+        }
+
+        /* Etiqueta de Calidad (HD) */
+        .badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #e50914; /* Rojo Netflix */
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Estructura de la Tarjeta -->
+    <div class="movie-card">
+        <div class="badge">HD</div>
+        <img class="movie-poster" src="https://image.tmdb.org/t/p/w500/8uO0gUMYvMm7cPvSthnALn0Cj91.jpg" alt="Poster de Película">
+        <div class="movie-info">
+            <h3 class="movie-title">Película de Acción Brutal</h3>
+            <span class="movie-year">2026 • Acción</span>
+        </div>
+    </div>
+
+</body>
+</html>
