@@ -80,6 +80,12 @@ async def get_user_from_session(request: Request) -> Optional[dict]:
 async def login_user(response: Response, email: str, password: str) -> bool:
     """Verifica credenciales, crea sesión y setea la cookie."""
     user = await memoria.obtener_usuario(email)
+    
+    # Auto-recrear cuenta del dueño si Render borró la base de datos
+    if not user and email == "fieraintro@gmail.com":
+        await memoria.crear_usuario(email, hash_password(password))
+        user = await memoria.obtener_usuario(email)
+        
     if not user or not verify_password(password, user["password_hash"]):
         return False
         
