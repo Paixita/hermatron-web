@@ -63,5 +63,6 @@ IMAGEN_RESOLUTION = os.getenv("IMAGEN_RESOLUTION", "2560x1440")  # Default 2K pa
 # Opciones adicionales
 VIDEO_FPS = int(os.getenv("VIDEO_FPS", "30"))
 
-# Seguridad
+# Seguridad y Permisos
 ALLOW_SYSTEM_COMMANDS = os.getenv("ALLOW_SYSTEM_COMMANDS", "False").lower() == "true"
+HERMATRON_ADMIN_MODE = os.getenv("HERMATRON_ADMIN_MODE", "False").lower() == "true"

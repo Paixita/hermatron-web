@@ -278,6 +278,45 @@
         .btn-submit-feedback:hover {
             opacity: 0.8;
         }
+
+        /* --- RESPONSIVIDAD PARA CELULARES --- */
+        @media (max-width: 768px) {
+            nav {
+                padding: 1rem 5%;
+            }
+            .logo {
+                font-size: 1.4rem;
+            }
+            .nav-links a {
+                display: none; /* Oculta enlaces de texto en móvil */
+            }
+            .nav-links a.btn-login {
+                display: block; /* Solo muestra el botón principal */
+                margin-left: 0;
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+            }
+            .hero h1 {
+                font-size: 2.8rem;
+                margin-top: 5rem;
+            }
+            .hero p {
+                font-size: 1rem;
+            }
+            .price-card {
+                width: 100%;
+                margin-bottom: 1rem;
+            }
+            .pricing-section {
+                padding: 3rem 5%;
+            }
+            .pricing-section h2 {
+                font-size: 2rem;
+            }
+            .feedback-section {
+                padding: 3rem 5%;
+            }
+        }
     </style>
 </head>
 <body>

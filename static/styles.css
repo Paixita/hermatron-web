@@ -2695,3 +2695,72 @@ input:checked + .slider:before {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 4px;
 }
+
+
+/* ==========================================
+   RESPONSIVIDAD MÓVIL
+========================================== */
+@media (max-width: 768px) {
+    .main-layout {
+        flex-direction: column;
+    }
+    
+    .left-sidebar {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto;
+        max-height: 200px;
+        border-right: none !important;
+        border-bottom: 1px solid var(--borde);
+    }
+
+    .side-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-left: none !important;
+        border-top: 1px solid var(--borde);
+    }
+
+    .header-content {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .header-actions {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .chat-container {
+        padding: 10px;
+    }
+
+    .mensaje {
+        max-width: 95%;
+        padding: 10px 15px;
+    }
+
+    .input-area {
+        padding: 10px;
+    }
+
+    .input-wrapper {
+        flex-wrap: wrap;
+    }
+
+    .btn-primary span {
+        display: none;
+    }
+
+    .logo-text h1 {
+        font-size: 1.2rem;
+    }
+    
+    .welcome-message h2 {
+        font-size: 1.5rem;
+    }
+
+    .welcome-icon {
+        font-size: 3rem;
+    }
+}
