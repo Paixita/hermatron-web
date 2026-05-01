@@ -893,15 +893,63 @@ async def _proceso_crear_video(proyecto_id: str, tema: str, prompt: str, voz: st
         print(f"Error en video background: {e}")
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
 
+async def _proceso_pre_produccion(proyecto_id: str, tema: str, prompt: str, voz: str):
+    try:
+        await generador_video.analizar_tema(tema, prompt, client, proyecto_id=proyecto_id)
+        await generador_video.disenar_escenas(proyecto_id, client)
+        
+        if hasattr(generador_video, '_cargar_proyecto'):
+            proj_obj = generador_video._cargar_proyecto(proyecto_id)
+            if proj_obj:
+                proj_obj.voz = voz
+                generador_video._guardar_proyecto(proj_obj)
+        
+        await generador_video.pre_producir_video(proyecto_id)
+    except Exception as e:
+        print(f"Error en pre-produccion background: {e}")
+        generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
+
+async def _proceso_ensamblar(proyecto_id: str):
+    try:
+        await generador_video.ensamblar_video_final(proyecto_id=proyecto_id, generar_voz_func=None)
+    except Exception as e:
+        print(f"Error en ensamblaje background: {e}")
+        generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
+
 @app.post("/api/video/crear")
 async def crear_video_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
     proyecto_id = f"proyecto_{int(time.time())}"
-    # Crear proyecto base
     generador_video.videos_dir.mkdir(exist_ok=True)
-    # Pasar a background
     background_tasks.add_task(_proceso_crear_video, proyecto_id, req.tema, req.prompt + f" Estilo: {req.estilo}", req.voz)
-    # Retornar inmediatamente
     return {"video_id": proyecto_id, "estado": "analizando"}
+
+@app.post("/api/video/pre-produccion")
+async def pre_produccion_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
+    proyecto_id = f"proyecto_{int(time.time())}"
+    generador_video.videos_dir.mkdir(exist_ok=True)
+    background_tasks.add_task(_proceso_pre_produccion, proyecto_id, req.tema, req.prompt + f" Estilo: {req.estilo}", req.voz)
+    return {"video_id": proyecto_id, "estado": "analizando"}
+
+class RegenerarImagenRequest(BaseModel):
+    proyecto_id: str
+    escena_num: int
+    prompt_visual: Optional[str] = None
+
+@app.post("/api/video/regenerar-imagen")
+async def regenerar_imagen_endpoint(req: RegenerarImagenRequest):
+    try:
+        nueva_ruta = await generador_video.regenerar_imagen_escena(req.proyecto_id, req.escena_num, req.prompt_visual)
+        return {"success": True, "imagen_path": nueva_ruta}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class EnsamblarRequest(BaseModel):
+    proyecto_id: str
+
+@app.post("/api/video/ensamblar")
+async def ensamblar_endpoint(req: EnsamblarRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(_proceso_ensamblar, req.proyecto_id)
+    return {"success": True, "estado": "ensamblando"}
 
 @app.get("/api/video/progreso/{video_id}")
 async def progreso_video(video_id: str):

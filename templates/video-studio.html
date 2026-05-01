@@ -167,6 +167,21 @@
                         <p class="small">El video aparecerá aquí cuando esté listo.</p>
                     </div>
 
+                    <!-- STORYBOARD EDITOR -->
+                    <div id="storyboardContainer" class="storyboard-container" style="display:none; padding: 20px; text-align: left; overflow-y: auto; max-height: 70vh;">
+                        <h3 style="color: var(--primary-color); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                            <span>🎞️ Storyboard / Editor de Escenas</span>
+                            <button class="btn btn-success" onclick="ensamblarVideoFinal()">🎬 Renderizar Video Final</button>
+                        </h3>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                            Revisa las imágenes generadas. Si alguna no te gusta, cámbiala antes de renderizar el video final.
+                        </p>
+                        
+                        <div id="storyboardGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+                            <!-- Las tarjetas de escenas se inyectarán aquí -->
+                        </div>
+                    </div>
+
                     <div id="previewVideoWrap" class="video-player-container" style="display:none">
                         <div id="previewLoading" class="video-loading">
                             <div class="spinner-small"></div>

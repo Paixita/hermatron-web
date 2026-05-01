@@ -493,7 +493,117 @@ Responde SOLO JSON:
         return nueva_escena
 
     # ================================================================
-    # FASE 5-7: PRODUCIR VIDEO (después de aprobado)
+    # NUEVA ARQUITECTURA: MODO EDITOR STORYBOARD
+    # ================================================================
+    
+    async def pre_producir_video(self, proyecto_id: str) -> dict:
+        """
+        Fase 1-5: Genera el guion y las imágenes (Storyboard) sin audio ni ensamblaje.
+        """
+        proyecto = self._cargar_proyecto(proyecto_id)
+        if not proyecto: raise ValueError("Proyecto no encontrado")
+        
+        work_dir = self._get_proyecto_dir(proyecto_id)
+        
+        # Las aprobamos todas por defecto en la pre-producción
+        for i, e in enumerate(proyecto.escenas_disenadas):
+            proyecto.escenas_disenadas[i]["aprobada"] = True
+            
+        escenas_aprobadas = [e for e in proyecto.escenas_disenadas if e.get("aprobada", False)]
+        
+        self._actualizar_estado(proyecto_id, VideoEstado.GENERANDO_IMAGENES)
+        self._actualizar_progreso(proyecto_id, 40)
+        
+        await self._generar_escenas_visuales(proyecto_id, escenas_aprobadas, work_dir)
+        
+        self._actualizar_estado(proyecto_id, VideoEstado.EN_REVIEW)
+        self._actualizar_progreso(proyecto_id, 80)
+        
+        # Volvemos a cargar para tener las rutas de imágenes actualizadas
+        proyecto = self._cargar_proyecto(proyecto_id)
+        return asdict(proyecto)
+
+    async def regenerar_imagen_escena(self, proyecto_id: str, escena_num: int, nuevo_prompt: str = None) -> str:
+        """
+        Regenera la imagen de una escena específica.
+        """
+        proyecto = self._cargar_proyecto(proyecto_id)
+        if not proyecto: raise ValueError("Proyecto no encontrado")
+        
+        escena_obj = None
+        for e in proyecto.escenas_disenadas:
+            if e["numero"] == escena_num:
+                escena_obj = e
+                break
+                
+        if not escena_obj: raise ValueError("Escena no encontrada")
+        
+        if nuevo_prompt:
+            escena_obj["descripcion_visual"] = nuevo_prompt
+            self._guardar_proyecto(proyecto)
+            
+        work_dir = self._get_proyecto_dir(proyecto_id)
+        
+        # Pasamos solo esta escena al generador visual
+        await self._generar_escenas_visuales(proyecto_id, [escena_obj], work_dir)
+        
+        proyecto = self._cargar_proyecto(proyecto_id)
+        for e in proyecto.escenas_disenadas:
+            if e["numero"] == escena_num:
+                return e.get("imagen_path")
+        return ""
+
+    async def ensamblar_video_final(self, proyecto_id: str, generar_voz_func=None) -> str:
+        """
+        Fases 6-7: Una vez el Storyboard está aprobado por el usuario, genera voz y ensambla.
+        """
+        proyecto = self._cargar_proyecto(proyecto_id)
+        if not proyecto: raise ValueError("Proyecto no encontrado")
+        work_dir = self._get_proyecto_dir(proyecto_id)
+        escenas_aprobadas = [e for e in proyecto.escenas_disenadas if e.get("aprobada", False)]
+        
+        if proyecto.narracion:
+            self._actualizar_estado(proyecto_id, VideoEstado.GENERANDO_VEZ)
+            self._actualizar_progreso(proyecto_id, 85)
+
+            escenas_con_texto = [e.get("texto_narracion", "") for e in escenas_aprobadas if len(e.get("texto_narracion", "")) > 5]
+            if len(proyecto.guion_completo or "") < 50 and escenas_con_texto:
+                texto_audio = " ".join(escenas_con_texto)
+            else:
+                texto_audio = proyecto.guion_completo or " ".join(escenas_con_texto)
+
+            if not texto_audio.strip():
+                texto_audio = "Video generado con Hermatron."
+
+            audio_path = await self._generar_audio(
+                proyecto_id, texto_audio, work_dir,
+                generar_voz_func, proyecto.voz
+            )
+            proyecto.audio_path = audio_path
+        else:
+            proyecto.audio_path = None
+
+        self._guardar_proyecto(proyecto)
+
+        self._actualizar_estado(proyecto_id, VideoEstado.ENSAMBLANDO)
+        self._actualizar_progreso(proyecto_id, 95)
+
+        video_final = await self._ensamblar_video(
+            proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas
+        )
+        self._actualizar_progreso(proyecto_id, 100)
+
+        proyecto.estado = VideoEstado.COMPLETADO
+        proyecto.archivo_final = Path(video_final).name if video_final else None
+        if video_final:
+            proyecto.duracion = self._obtener_duracion(video_final)
+            proyecto.tamano = self._formatear_tamano(Path(video_final).stat().st_size)
+        self._guardar_proyecto(proyecto)
+
+        return video_final
+
+    # ================================================================
+    # FASE 5-7: PRODUCIR VIDEO COMPLETO (Flujo Antiguo/Automático)
     # ================================================================
     async def producir_video(self, proyecto_id: str, groq_client=None,
                               generar_voz_func=None) -> str:
@@ -587,8 +697,9 @@ Responde SOLO JSON:
         estilo_visual = proyecto.analisis.get("estilo_visual", "") if (proyecto and hasattr(proyecto, 'analisis') and proyecto.analisis) else "cinematic"
 
         for i, escena in enumerate(escenas):
-            print(f"[VIDEO] Procesando visuales para escena {i+1} de {total}...")
-            escena_dir = work_dir / f"escena_{i+1}"
+            num_escena = escena.get("numero", i+1)
+            print(f"[VIDEO] Procesando visuales para escena {num_escena} de {total}...")
+            escena_dir = work_dir / f"escena_{num_escena}"
             escena_dir.mkdir(exist_ok=True)
             img_path = escena_dir / "imagen.png"
 
@@ -605,22 +716,22 @@ Responde SOLO JSON:
                 fuente_usada = "pollinations"
                 # Actualizar el path en la escena del proyecto
                 for e_orig in proyecto.escenas_disenadas:
-                    if e_orig.get("numero") == i + 1:
+                    if e_orig.get("numero") == num_escena:
                         e_orig["imagen_path"] = str(img_path)
             else:
-                print(f"[VIDEO]  Fallback Placeholder para escena {i+1}")
+                print(f"[VIDEO]  Fallback Placeholder para escena {num_escena}")
                 await self._generar_imagen_placeholder(
-                    str(img_path), escena.get("descripcion_visual", f"Escena {i+1}"),
+                    str(img_path), escena.get("descripcion_visual", f"Escena {num_escena}"),
                     indice=i, total=total, query=query
                 )
                 for e_orig in proyecto.escenas_disenadas:
-                    if e_orig.get("numero") == i + 1:
+                    if e_orig.get("numero") == num_escena:
                         e_orig["imagen_path"] = str(img_path)
 
             # Guardar metadata (SIEMPRE, sin importar la fuente)
             with open(escena_dir / "metadata.json", "w", encoding="utf-8") as f:
                 json.dump({
-                    "indice": i + 1,
+                    "indice": num_escena,
                     "titulo": escena.get("titulo", ""),
                     "texto": escena.get("texto_narracion", ""),
                     "visual": escena.get("descripcion_visual", ""),
