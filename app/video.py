@@ -3,6 +3,7 @@ Módulo de Video - Generador de Videos para HERMATRON v4.0
 Pipeline "Director de Cine": Analizar → Diseñar → Review → Producir
 """
 import asyncio
+import textwrap
 import os
 import json
 import time
@@ -1044,10 +1045,16 @@ Responde SOLO JSON:
             clips = []
             for i, img in enumerate(imagenes):
                 # 1. Cargar imagen y establecer duración
-                clip = ImageClip(img).set_duration(dur_escena + 1.0)
-            
-                # 2. Usar resize dinámico según resolución configurada
-                clip = clip.resize(method='fit', width=w, height=h)
+                base_clip = ImageClip(img).set_duration(dur_escena + 1.0).resize(method='fit', width=w, height=h)
+                
+                # 2. Generar subtítulo para la escena
+                texto_escena = escenas[i].get("texto_narracion", "") if i < len(escenas) else ""
+                if texto_escena and len(texto_escena) > 3:
+                    sub_clip = self._crear_clip_subtitulo(texto_escena, w, h, dur_escena + 1.0, work_dir, i)
+                    # Componer el subtítulo sobre la imagen base
+                    clip = CompositeVideoClip([base_clip, sub_clip.set_position("center")])
+                else:
+                    clip = base_clip
             
                 # 3. Fade suave entre escenas
                 if len(clips) > 0:
@@ -1089,6 +1096,57 @@ Responde SOLO JSON:
             import traceback
             traceback.print_exc()
             return None
+
+
+    def _crear_clip_subtitulo(self, texto: str, w: int, h: int, duracion: float, work_dir: Path, idx: int) -> "ImageClip":
+        """Crear clip de imagen transparente con texto (evita usar ImageMagick)"""
+        from PIL import Image, ImageDraw, ImageFont
+        import textwrap
+        
+        # Imagen transparente
+        img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Intentar cargar una fuente bonita, si no, usa la por defecto
+        try:
+            # Usar una fuente grande
+            font_size = int(h * 0.05) # 5% de la pantalla
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
+            font_size = 40
+            
+        # Dividir texto largo en líneas
+        caracteres_por_linea = 40
+        lineas = textwrap.wrap(texto, width=caracteres_por_linea)
+        
+        # Dibujar líneas en la parte inferior (80% de la altura)
+        y_start = int(h * 0.80)
+        
+        for i, linea in enumerate(lineas):
+            # Obtener el cuadro delimitador del texto
+            bbox = draw.textbbox((0, 0), linea, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            
+            x = (w - text_w) // 2
+            y = y_start + (i * (text_h + 10))
+            
+            # Dibujar borde negro para que resalte
+            grosor = 3
+            for dx in range(-grosor, grosor+1):
+                for dy in range(-grosor, grosor+1):
+                    draw.text((x+dx, y+dy), linea, font=font, fill=(0,0,0,255))
+                    
+            # Dibujar texto blanco encima
+            draw.text((x, y), linea, font=font, fill=(255,255,255,255))
+            
+        # Guardar temporal
+        temp_path = work_dir / f"sub_{idx}.png"
+        img.save(temp_path)
+        
+        from moviepy.editor import ImageClip
+        return ImageClip(str(temp_path)).set_duration(duracion)
 
     async def _verificar_ffmpeg(self) -> Optional[str]:
         try:
