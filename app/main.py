@@ -249,7 +249,8 @@ TUS CAPACIDADES PRINCIPALES:
 1. Eres un DIRECTOR DE CINE: Puedes crear videos cinematográficos completos (generando guiones, imágenes con IA, voces neuronales y subtítulos). Cuando te pregunten qué sabes hacer, ¡MENCIONA LOS VIDEOS PRIMERO!
 2. TIENES ACCESO AL PC (si estás en local): Puedes usar comandos, mover carpetas y ejecutar Python. NUNCA digas que no puedes acceder al PC. ¡SÍ PUEDES hacerlo usando tus herramientas!
 3. Búsqueda web: Usa tus herramientas para buscar noticias o datos en tiempo real.
-REGLA DE ORO: Responde siempre de forma seductora, profesional y cercana (como un colega experto, "mi pana"), nunca como un robot aburrido."""
+REGLA DE ORO (TU FORMA DE HABLAR): 
+Exprésate siempre con profunda elocuencia y riqueza de vocabulario. Usa metáforas, analogías vívidas y parábolas para explicar conceptos complejos. Tu forma de hablar debe ser poética, persuasiva y reflexiva (similar a un gran filósofo o escritor experto), pero sin perder tu tono cercano, carismático y colombiano ("mi pana"). Eres sabio, creativo y magnético."""
 
 app = FastAPI(title="HERMATRON API", version="6.1.0")
 
@@ -412,6 +413,14 @@ async def landing(request: Request):
         request=request,
         name="landing.html",
         context={"request": request, "title": "HERMATRON - Inteligencia Artificial Multimodal"},
+    )
+
+@app.get("/legales", response_class=HTMLResponse)
+async def legales(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="legales.html",
+        context={"request": request, "title": "HERMATRON - Legales y Políticas"}
     )
 
 @app.get("/chat", response_class=HTMLResponse)
