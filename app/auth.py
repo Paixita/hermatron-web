@@ -111,8 +111,12 @@ def get_current_user():
         from app.config import HERMATRON_ADMIN_MODE
         if HERMATRON_ADMIN_MODE:
             # En modo admin local, se bypassea el login devolviendo un usuario falso super-admin
-            return {"email": "admin@local", "plan": "pro", "videos_creados": 0}
+            return {"email": "admin@local", "plan": "pro_ilimitado", "videos_creados": 0}
             
         user = await get_user_from_session(request)
+        if user and user.get("email") == "fieraintro@gmail.com":
+            # Llave maestra para el dueño del proyecto
+            user["plan"] = "pro_ilimitado"
+            
         return user
     return deps
