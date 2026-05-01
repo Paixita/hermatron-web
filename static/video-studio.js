@@ -991,7 +991,8 @@ async function ensamblarVideoFinal() {
                     }, 5000);
                 } else if (progData.estado === 'error') {
                     clearInterval(pollingInterval);
-                    progresoEstado.innerHTML = '❌ <strong>Error:</strong> Falló al ensamblar.';
+                    const errorMsg = progData.error || 'Falló al ensamblar.';
+                    progresoEstado.innerHTML = '❌ <strong>Error:</strong> ' + errorMsg;
                     progresoFill.style.background = '#da3633';
                 }
             } catch (err) {

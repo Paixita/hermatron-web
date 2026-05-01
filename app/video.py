@@ -560,13 +560,14 @@ Responde SOLO JSON:
         proyecto = self._cargar_proyecto(proyecto_id)
         if not proyecto: raise ValueError("Proyecto no encontrado")
         work_dir = self._get_proyecto_dir(proyecto_id)
-        escenas_aprobadas = [e for e in proyecto.escenas_disenadas if e.get("aprobada", False)]
+        # En esta versión, todas las escenas diseñadas se consideran aprobadas para ensamblaje.
+        escenas_aprobadas = proyecto.escenas_disenadas
         
         if proyecto.narracion:
             self._actualizar_estado(proyecto_id, VideoEstado.GENERANDO_VEZ)
             self._actualizar_progreso(proyecto_id, 85)
 
-            escenas_con_texto = [e.get("texto_narracion", "") for e in escenas_aprobadas if len(e.get("texto_narracion", "")) > 5]
+            escenas_con_texto = [e.get("texto_narracion") for e in escenas_aprobadas if len(e.get("texto_narracion") or "") > 5]
             if len(proyecto.guion_completo or "") < 50 and escenas_con_texto:
                 texto_audio = " ".join(escenas_con_texto)
             else:
@@ -1117,10 +1118,11 @@ Responde SOLO JSON:
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
         
         imagenes = []
-        for i in range(len(escenas)):
-            img = work_dir / f"escena_{i+1}" / "imagen.jpg"
+        for i, escena in enumerate(escenas):
+            num_escena = escena.get("numero", i+1)
+            img = work_dir / f"escena_{num_escena}" / "imagen.jpg"
             if not img.exists():
-                img = work_dir / f"escena_{i+1}" / "imagen.png"
+                img = work_dir / f"escena_{num_escena}" / "imagen.png"
             if img.exists():
                 imagenes.append(str(img))
 
@@ -1156,7 +1158,7 @@ Responde SOLO JSON:
             clips = []
             for i, img in enumerate(imagenes):
                 # 1. Cargar imagen y establecer duración
-                base_clip = ImageClip(img).set_duration(dur_escena + 1.0).resize(method='fit', width=w, height=h)
+                base_clip = ImageClip(img).set_duration(dur_escena + 1.0).resize(width=w, height=h)
                 
                 # 2. Generar subtítulo para la escena
                 texto_escena = escenas[i].get("texto_narracion", "") if i < len(escenas) else ""
