@@ -406,7 +406,15 @@ if ALLOW_SYSTEM_COMMANDS:
 # ==========================================
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
+async def landing(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="landing.html",
+        context={"request": request, "title": "HERMATRON - Inteligencia Artificial Multimodal"},
+    )
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_app(request: Request):
     try:
         static_version = int((BASE_DIR / "static" / "app.js").stat().st_mtime)
     except Exception:

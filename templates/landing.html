@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hermatron | Tu Estudio IA Multimodal</title>
+    <!-- Fuentes Modernas -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Iconos -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --surface-color: rgba(20, 20, 25, 0.7);
+            --primary-color: #00e5ff;
+            --primary-glow: rgba(0, 229, 255, 0.4);
+            --secondary-color: #b052ff;
+            --text-main: #ffffff;
+            --text-muted: #8892b0;
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(176, 82, 255, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(0, 229, 255, 0.08), transparent 25%);
+        }
+
+        /* --- NAVEGACIÓN --- */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 5%;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-links a {
+            color: var(--text-main);
+            text-decoration: none;
+            margin-left: 2rem;
+            font-size: 0.95rem;
+            transition: color 0.3s;
+        }
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
+        .btn-login {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 0.6rem 1.5rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-login:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* --- HERO SECTION --- */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0 5%;
+            position: relative;
+        }
+        .hero h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 4.5rem;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            max-width: 900px;
+        }
+        .hero h1 span {
+            color: var(--primary-color);
+            text-shadow: 0 0 20px var(--primary-glow);
+        }
+        .hero p {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin-bottom: 2.5rem;
+            line-height: 1.6;
+        }
+        .btn-start {
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            color: #000;
+            font-weight: 800;
+            font-size: 1.1rem;
+            padding: 1rem 2.5rem;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: 0 0 20px var(--primary-glow);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .btn-start:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 0 30px var(--primary-glow);
+        }
+
+        /* --- PRECIOS (EL SLIDER VISUAL) --- */
+        .pricing-section {
+            padding: 5rem 5%;
+            text-align: center;
+        }
+        .pricing-section h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+        }
+        .pricing-container {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            flex-wrap: wrap;
+        }
+        .price-card {
+            background: var(--surface-color);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 3rem 2rem;
+            width: 350px;
+            backdrop-filter: blur(10px);
+            text-align: left;
+            position: relative;
+            transition: transform 0.3s;
+        }
+        .price-card:hover {
+            transform: translateY(-10px);
+        }
+        .price-card.pro {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 30px rgba(0, 229, 255, 0.1);
+        }
+        .pro-badge {
+            position: absolute;
+            top: -15px;
+            right: 20px;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            color: #000;
+            font-size: 0.8rem;
+            font-weight: bold;
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+        .price-title {
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+        .price-card.pro .price-title {
+            color: var(--primary-color);
+        }
+        .price-amount {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 2rem;
+        }
+        .price-amount span {
+            font-size: 1rem;
+            color: var(--text-muted);
+            font-weight: normal;
+        }
+        .feature-list {
+            list-style: none;
+            margin-bottom: 2.5rem;
+        }
+        .feature-list li {
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            color: #ddd;
+        }
+        .feature-list li i {
+            color: var(--primary-color);
+            margin-right: 10px;
+        }
+        .btn-plan {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .price-card.pro .btn-plan {
+            background: var(--primary-color);
+            color: #000;
+            border: none;
+        }
+        .price-card.pro .btn-plan:hover {
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        /* --- SUGERENCIAS (EL BLOC) --- */
+        .feedback-section {
+            padding: 5rem 5%;
+            background: rgba(0, 0, 0, 0.5);
+            border-top: 1px solid var(--glass-border);
+        }
+        .feedback-container {
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .feedback-container h2 {
+            font-family: 'Outfit', sans-serif;
+            margin-bottom: 1rem;
+        }
+        .feedback-container p {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+        }
+        .feedback-box {
+            background: var(--surface-color);
+            border: 1px solid var(--glass-border);
+            padding: 2rem;
+            border-radius: 15px;
+        }
+        textarea.feedback-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: white;
+            padding: 1rem;
+            min-height: 120px;
+            resize: vertical;
+            margin-bottom: 1rem;
+        }
+        .btn-submit-feedback {
+            background: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        .btn-submit-feedback:hover {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="logo">HERMATRON</div>
+        <div class="nav-links">
+            <a href="#features">Funciones</a>
+            <a href="#pricing">Planes</a>
+            <a href="#feedback">Comunidad</a>
+            <a href="/chat" class="btn-login">Iniciar Sesión</a>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <!-- Placeholder para el video de fondo futuro -->
+        <h1>Crea el Futuro. <br><span>Tu Estudio IA Multimodal</span></h1>
+        <p>Genera videos cinematográficos, programa código y resuelve problemas complejos con un solo agente. Diseñado para creadores que no tienen tiempo que perder.</p>
+        <a href="/chat" class="btn-start">Comenzar a Crear <i class="fas fa-arrow-right" style="margin-left: 8px;"></i></a>
+    </section>
+
+    <section id="pricing" class="pricing-section">
+        <h2>Planes para Creadores</h2>
+        <div class="pricing-container">
+            
+            <!-- PLAN GRATIS -->
+            <div class="price-card">
+                <div class="price-title">Plan Básico</div>
+                <div class="price-amount">$0 <span>/mes</span></div>
+                <ul class="feature-list">
+                    <li><i class="fas fa-check"></i> 3 Videos al mes (Hasta 1 min)</li>
+                    <li><i class="fas fa-check"></i> Subtítulos Dinámicos</li>
+                    <li><i class="fas fa-check"></i> Voces Naturales Estándar</li>
+                    <li><i class="fas fa-check"></i> Marca de agua Hermatron</li>
+                </ul>
+                <a href="/chat" class="btn-plan">Usar Gratis</a>
+            </div>
+
+            <!-- PLAN PRO -->
+            <div class="price-card pro">
+                <div class="pro-badge">Más Popular</div>
+                <div class="price-title">Plan Creador PRO</div>
+                <div class="price-amount">$9.99 <span>/mes</span></div>
+                <ul class="feature-list">
+                    <li><i class="fas fa-check"></i> 30 Videos al mes (Hasta 15 min)</li>
+                    <li><i class="fas fa-check"></i> Subtítulos Dinámicos PRO</li>
+                    <li><i class="fas fa-star"></i> Voces Ultra-Realistas (ElevenLabs)</li>
+                    <li><i class="fas fa-star"></i> Sin marca de agua</li>
+                    <li><i class="fas fa-code"></i> Ejecución de Código Ilimitada</li>
+                </ul>
+                <a href="#paypal" class="btn-plan"><i class="fab fa-paypal"></i> Suscribirse</a>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- BLOQUE DE SUGERENCIAS / COMUNIDAD -->
+    <section id="feedback" class="feedback-section">
+        <div class="feedback-container">
+            <h2>Caja de Sugerencias</h2>
+            <p>Hermatron está construido para ti. ¿Qué función te gustaría ver en el futuro o qué podemos mejorar?</p>
+            <div class="feedback-box">
+                <textarea class="feedback-input" placeholder="Escribe tu idea, sugerencia o reporte de error aquí..."></textarea>
+                <button class="btn-submit-feedback">Enviar Sugerencia al Desarrollador</button>
+            </div>
+        </div>
+    </section>
+
+</body>
+</html>

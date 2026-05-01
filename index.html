@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cine Pro Local</title>
+    <!-- Tailwind CSS para diseño rápido sin archivos extra -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0b0b0b; }
+        .movie-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 20px;
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <!-- Barra de Navegación -->
+    <nav class="p-6 flex justify-between items-center bg-black sticky top-0 z-50">
+        <h1 class="text-2xl font-bold text-red-600">PANITA CINE</h1>
+        <input type="text" id="search" placeholder="Busca tu película..." 
+               class="bg-gray-800 px-4 py-2 rounded-full w-1/3 focus:outline-none focus:ring-2 focus:ring-red-500">
+    </nav>
+
+    <!-- Contenedor Principal -->
+    <main class="p-8">
+        <h2 class="text-xl mb-6 font-semibold">Películas de Acción</h2>
+        
+        <!-- Aquí es donde JavaScript "dibujará" las películas -->
+        <div id="grid-peliculas" class="movie-grid"></div>
+    </main>
+
+    <!-- Modal del Reproductor (Oculto por defecto) -->
+    <div id="player-modal" class="fixed inset-0 bg-black bg-opacity-95 hidden flex flex-col items-center justify-center z-[100]">
+        <button onclick="cerrarPlayer()" class="absolute top-5 right-10 text-4xl">&times;</button>
+        <div id="video-container" class="w-full max-w-4xl aspect-video bg-gray-900">
+            <!-- El iframe del video se cargará aquí -->
+        </div>
+        <h2 id="player-title" class="text-2xl mt-4 font-bold"></h2>
+    </div>
+
+    <script>
+        // 1. Datos de prueba (Aquí podrías tener 500 películas después)
+        const peliculas = [
+            { id: 1, titulo: "Acción en Seúl", año: 2024, img: "https://image.tmdb.org/t/p/w500/8uO0gUMYvMm7cPvSthnALn0Cj91.jpg", video: "https://www.youtube.com/embed/dQw4w9WgXcQ" },
+            { id: 2, titulo: "El Guerrero", año: 2023, img: "https://image.tmdb.org/t/p/w500/v99778-poster.jpg", video: "#" },
+            { id: 3, titulo: "Noche Eterna", año: 2025, img: "https://image.tmdb.org/t/p/w500/v99778-poster.jpg", video: "#" },
+            { id: 4, titulo: "Venganza Ninja", año: 2022, img: "https://image.tmdb.org/t/p/w500/8uO0gUMYvMm7cPvSthnALn0Cj91.jpg", video: "#" },
+        ];
+
+        const grid = document.getElementById('grid-peliculas');
+
+        // 2. Función para mostrar las películas
+        function cargarPeliculas(lista) {
+            grid.innerHTML = "";
+            lista.forEach(peli => {
+                const card = document.createElement('div');
+                card.className = "cursor-pointer group";
+                card.onclick = () => abrirPlayer(peli);
+                card.innerHTML = `
+                    <div class="relative overflow-hidden rounded-lg">
+                        <img src="${peli.img}" class="w-full h-72 object-cover transition transform group-hover:scale-110">
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 flex items-center justify-center transition">
+                            <span class="opacity-0 group-hover:opacity-100 text-3xl">▶</span>
+                        </div>
+                    </div>
+                    <h3 class="mt-2 font-medium">${peli.titulo}</h3>
+                    <p class="text-gray-400 text-sm">${peli.año}</p>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // 3. Funciones del Reproductor
+        function abrirPlayer(peli) {
+            const modal = document.getElementById('player-modal');
+            const container = document.getElementById('video-container');
+            const title = document.getElementById('player-title');
+            
+            title.innerText = peli.titulo;
+            container.innerHTML = `<iframe class="w-full h-full" src="${peli.video}" frameborder="0" allowfullscreen></iframe>`;
+            modal.classList.remove('hidden');
+        }
+
+        function cerrarPlayer() {
+            document.getElementById('player-modal').classList.add('hidden');
+            document.getElementById('video-container').innerHTML = ""; // Detiene el video
+        }
+
+        // 4. Inicializar
+        cargarPeliculas(peliculas);
+
+        // 5. Buscador en tiempo real
+        document.getElementById('search').addEventListener('input', (e) => {
+            const busqueda = e.target.value.toLowerCase();
+            const filtradas = peliculas.filter(p => p.titulo.toLowerCase().includes(busqueda));
+            cargarPeliculas(filtradas);
+        });
+    </script>
+</body>
+</html>
