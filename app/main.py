@@ -23,7 +23,7 @@ try:
 except Exception:
     pass
 
-from fastapi import FastAPI, Request, HTTPException, Form
+from fastapi import FastAPI, Request, HTTPException, Form, Depends, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -38,6 +38,7 @@ from .config import GROQ_API_KEY, GROQ_MODEL, GROQ_MODEL_VISION, GROQ_MODEL_VISI
 from .memoria import memoria
 from .voz import generador_voz
 from .busqueda import buscador 
+from . import auth
 from .video import generador_video, VideoEstado
 from .modos import listar_modos
 
@@ -423,8 +424,47 @@ async def legales(request: Request):
         context={"request": request, "title": "HERMATRON - Legales y Políticas"}
     )
 
-@app.get("/chat", response_class=HTMLResponse)
-async def chat_app(request: Request):
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"request": request, "title": "HERMATRON - Iniciar Sesión"}
+    )
+
+@app.post("/api/register")
+async def api_register(username: str = Form(...), password: str = Form(...)):
+    # username is used for email
+    success = await memoria.crear_usuario(username, auth.hash_password(password))
+    if not success:
+        raise HTTPException(status_code=400, detail="El correo ya está registrado.")
+    
+    # Log in automatically
+    response = JSONResponse(content={"success": True})
+    await auth.login_user(response, username, password)
+    return response
+
+@app.post("/api/login")
+async def api_login(username: str = Form(...), password: str = Form(...)):
+    response = JSONResponse(content={"success": True})
+    success = await auth.login_user(response, username, password)
+    if not success:
+        raise HTTPException(status_code=401, detail="Credenciales incorrectas.")
+    return response
+
+@app.post("/api/logout")
+async def api_logout(request: Request):
+    response = JSONResponse(content={"success": True})
+    await auth.logout_user(response, request)
+    return response
+
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
+
+@app.get("/chat")
+async def chat_app(request: Request, current_user: dict = Depends(auth.get_current_user())):
+    if not current_user:
+        return RedirectResponse(url="/login")
+        
     try:
         static_version = int((BASE_DIR / "static" / "app.js").stat().st_mtime)
     except Exception:
@@ -432,12 +472,24 @@ async def chat_app(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "title": "HERMATRON - Chat Multiusos", "static_version": static_version},
+        context={
+            "request": request, 
+            "title": "HERMATRON - Chat Multiusos", 
+            "static_version": static_version,
+            "user": current_user
+        },
     )
 
-@app.get("/videos", response_class=HTMLResponse)
-async def video_studio(request: Request):
-    return templates.TemplateResponse(request=request, name="video-studio.html", context={"request": request, "title": "HERMATRON - Estudio de Video"})
+@app.get("/videos")
+async def video_studio(request: Request, current_user: dict = Depends(auth.get_current_user())):
+    if not current_user:
+        return RedirectResponse(url="/login")
+        
+    return templates.TemplateResponse(
+        request=request, 
+        name="video-studio.html", 
+        context={"request": request, "title": "HERMATRON - Estudio de Video", "user": current_user}
+    )
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):

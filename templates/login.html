@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hermatron | Iniciar Sesión</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --surface-color: rgba(20, 20, 25, 0.7);
+            --primary-color: #00e5ff;
+            --primary-glow: rgba(0, 229, 255, 0.4);
+            --secondary-color: #b052ff;
+            --text-main: #ffffff;
+            --text-muted: #8892b0;
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(176, 82, 255, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(0, 229, 255, 0.08), transparent 25%);
+        }
+        .login-container {
+            background: var(--surface-color);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 3rem;
+            width: 100%;
+            max-width: 450px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        .logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        .form-control {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            outline: none;
+            transition: all 0.3s;
+        }
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
+        .btn-submit {
+            width: 100%;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            color: #000;
+            font-weight: bold;
+            padding: 1rem;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+        .toggle-form {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        .toggle-form span {
+            color: var(--primary-color);
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .error-message {
+            color: #ff4444;
+            background: rgba(255,68,68,0.1);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 1rem;
+            display: none;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <div class="logo">HERMATRON</div>
+        <div class="subtitle" id="formSubtitle">Bienvenido a tu Estudio IA</div>
+        
+        <div id="errorBox" class="error-message"></div>
+
+        <form id="authForm" onsubmit="handleAuth(event)">
+            <div class="form-group">
+                <label>Correo Electrónico</label>
+                <input type="email" id="email" class="form-control" required placeholder="tu@correo.com">
+            </div>
+            <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" id="password" class="form-control" required placeholder="••••••••">
+            </div>
+            
+            <button type="submit" class="btn-submit" id="submitBtn">Iniciar Sesión</button>
+            
+            <div class="toggle-form" id="toggleText">
+                ¿No tienes cuenta? <span onclick="toggleMode()">Regístrate gratis</span>
+            </div>
+            <a href="/" style="display:block; text-align:center; margin-top:1.5rem; color: var(--text-muted); text-decoration:none; font-size:0.85rem;">← Volver al inicio</a>
+        </form>
+    </div>
+
+    <script>
+        let isLogin = true;
+
+        function toggleMode() {
+            isLogin = !isLogin;
+            document.getElementById('submitBtn').innerText = isLogin ? 'Iniciar Sesión' : 'Crear Cuenta Gratis';
+            document.getElementById('formSubtitle').innerText = isLogin ? 'Bienvenido a tu Estudio IA' : 'Únete a la nueva era de creadores';
+            document.getElementById('toggleText').innerHTML = isLogin 
+                ? '¿No tienes cuenta? <span onclick="toggleMode()">Regístrate gratis</span>'
+                : '¿Ya tienes cuenta? <span onclick="toggleMode()">Inicia Sesión</span>';
+            document.getElementById('errorBox').style.display = 'none';
+        }
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorBox = document.getElementById('errorBox');
+            
+            errorBox.style.display = 'none';
+            const endpoint = isLogin ? '/api/login' : '/api/register';
+
+            try {
+                const formData = new FormData();
+                formData.append('username', email); // OAuth2 expects 'username'
+                formData.append('password', password);
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    window.location.href = '/chat';
+                } else {
+                    const data = await response.json();
+                    errorBox.innerText = data.detail || 'Ocurrió un error.';
+                    errorBox.style.display = 'block';
+                }
+            } catch (err) {
+                errorBox.innerText = 'Error de conexión.';
+                errorBox.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

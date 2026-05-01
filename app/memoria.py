@@ -62,6 +62,27 @@ class MemoriaDB:
                 )
             """)
             
+            # Tabla de usuarios
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    plan TEXT DEFAULT 'gratis',
+                    videos_creados INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Tabla de sesiones (Login)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS sesiones (
+                    token TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    expires_at DATETIME NOT NULL
+                )
+            """)
+            
             # Y agregar conversacion_id a chat_history
             try:
                 await db.execute("ALTER TABLE chat_history ADD COLUMN conversacion_id TEXT DEFAULT 'default'")
@@ -137,6 +158,42 @@ class MemoriaDB:
             await db.execute("DELETE FROM conversaciones WHERE id = ?", (id,))
             await db.execute("DELETE FROM chat_history WHERE conversacion_id = ?", (id,))
             await db.commit()
+
+    # --- Gestión de Usuarios ---
+    
+    async def crear_usuario(self, email: str, password_hash: str) -> bool:
+        """Crea un nuevo usuario. Retorna True si tuvo éxito, False si el email ya existe."""
+        await self.init()
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(
+                    "INSERT INTO usuarios (email, password_hash) VALUES (?, ?)",
+                    (email, password_hash)
+                )
+                await db.commit()
+                return True
+        except aiosqlite.IntegrityError:
+            return False
+
+    async def obtener_usuario(self, email: str) -> Optional[dict]:
+        """Obtiene un usuario por su email."""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM usuarios WHERE email = ?", (email,)) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
+    async def incrementar_video_uso(self, email: str) -> int:
+        """Incrementa el contador de videos y retorna el nuevo valor."""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            await db.execute("UPDATE usuarios SET videos_creados = videos_creados + 1 WHERE email = ?", (email,))
+            await db.commit()
+            async with db.execute("SELECT videos_creados FROM usuarios WHERE email = ?", (email,)) as cursor:
+                row = await cursor.fetchone()
+                return row["videos_creados"] if row else 0
             
     async def guardar_proyecto(self, nombre: str, descripcion: str = "", metadata: dict = None):
         """Guardar o actualizar un proyecto"""
