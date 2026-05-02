@@ -687,6 +687,14 @@ Responde SOLO JSON:
             self._actualizar_progreso(proyecto_id, 0)
             raise
 
+    def _get_resolucion_from_tema(self, tema: str) -> tuple[int, int]:
+        texto = str(tema).lower()
+        if any(w in texto for w in ["9:16", "9/16", "vertical", "tiktok", "reels", "shorts"]):
+            return (1440, 2560) # 9:16 en 2K
+        elif any(w in texto for w in ["1:1", "cuadrado", "square", "instagram", "post"]):
+            return (1080, 1080) # 1:1
+        return (2560, 1440) # 16:9 en 2K (default)
+
     # ================================================================
     # FASE 5: Generar Imágenes
     # ================================================================
@@ -712,7 +720,8 @@ Responde SOLO JSON:
             query_mejorado = f"{descripcion}, {query}, {estilo_visual}, highly detailed, masterpiece, 8k resolution, cinematic lighting"
             print(f"[VIDEO]  Generando con IA (Pollinations): {query_mejorado}")
             
-            exito = await self._generar_imagen_pollinations(query_mejorado, str(img_path))
+            width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
+            exito = await self._generar_imagen_pollinations(query_mejorado, str(img_path), width, height)
             if exito:
                 fuente_usada = "pollinations"
                 # Actualizar el path en la escena del proyecto
@@ -751,7 +760,7 @@ Responde SOLO JSON:
         self._guardar_proyecto(proyecto)
         print(f"[VIDEO]  {total} escenas procesadas y guardadas")
 
-    async def _generar_imagen_pollinations(self, query: str, ruta_salida: str) -> bool:
+    async def _generar_imagen_pollinations(self, query: str, ruta_salida: str, width: int = 2560, height: int = 1440) -> bool:
         """Generar imagen usando Pollinations.ai con reintentos y sanitización"""
         import httpx
         import urllib.parse
@@ -762,9 +771,7 @@ Responde SOLO JSON:
         query_codificado = urllib.parse.quote(query_limpio)
         
         # MEJORAS: Mayor resolución y mejor calidad
-        # Opciones: 1920x1080 (HD), 2560x1440 (2K), 3840x2160 (4K)
-        resolution = os.getenv("IMAGEN_RESOLUTION", "2560x1440")  # Default 2K
-        width, height = map(int, resolution.split('x'))
+        resolution = f"{width}x{height}"
         
         # Seeds múltiples para variedad + mejores prompts
         seed = random.randint(1, 99999)
@@ -1161,9 +1168,14 @@ Responde SOLO JSON:
             dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
             
             # Crear clips de imagen con efecto Ken Burns (Zoom Dinámico)
-            # Obtener resolución configurada (dinámica)
-            resolution = os.getenv("IMAGEN_RESOLUTION", "2560x1440")
-            w, h = map(int, resolution.split('x'))
+            # Detectar resolución nativa de las imágenes generadas
+            w, h = 2560, 1440
+            if imagenes:
+                try:
+                    with PIL.Image.open(imagenes[0]) as first_img:
+                        w, h = first_img.size
+                except Exception:
+                    pass
         
             clips = []
             for i, img in enumerate(imagenes):
