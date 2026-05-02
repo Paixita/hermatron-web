@@ -1069,9 +1069,11 @@ Responde SOLO JSON:
         # Intento 3: gTTS (Nube / Bulletproof)
         try:
             import gtts
+            import asyncio
             print(f"[AUDIO] Generando con gTTS (respaldo)...")
             tts = gtts.gTTS(text=texto_completo, lang='es', tld='com.mx')
-            tts.save(str(audio_path))
+            # Ejecutar llamada sincrónica en un hilo separado para no bloquear el Event Loop de FastAPI
+            await asyncio.to_thread(tts.save, str(audio_path))
             print(f"[AUDIO]  gTTS OK")
             return str(audio_path)
         except Exception as e:
