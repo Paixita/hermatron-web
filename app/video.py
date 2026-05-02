@@ -1056,17 +1056,28 @@ Responde SOLO JSON:
         # Intento 2: edge-tts
         try:
             import edge_tts
-            # Si el id es de ElevenLabs, cambiar a uno default de edge-tts
+            import asyncio
             edge_voz = voz if "-" in voz else "es-MX-JorgeNeural"
             print(f"[AUDIO] Generando con edge-tts ({edge_voz})...")
             communicate = edge_tts.Communicate(texto_completo, edge_voz, rate="-5%", volume="+5%")
-            await communicate.save(str(audio_path))
+            await asyncio.wait_for(communicate.save(str(audio_path)), timeout=40.0)
             print(f"[AUDIO]  edge-tts OK")
             return str(audio_path)
         except Exception as e:
             print(f"[AUDIO] Error edge-tts: {e}")
 
-        # Intento 3: pyttsx3 (local, siempre funciona)
+        # Intento 3: gTTS (Nube / Bulletproof)
+        try:
+            import gtts
+            print(f"[AUDIO] Generando con gTTS (respaldo)...")
+            tts = gtts.gTTS(text=texto_completo, lang='es', tld='com.mx')
+            tts.save(str(audio_path))
+            print(f"[AUDIO]  gTTS OK")
+            return str(audio_path)
+        except Exception as e:
+            print(f"[AUDIO] Error gTTS: {e}")
+
+        # Intento 4: pyttsx3 (local, para pruebas)
         try:
             import pyttsx3
             print(f"[AUDIO] Generando con pyttsx3 (local)...")
@@ -1082,7 +1093,7 @@ Responde SOLO JSON:
             engine.save_to_file(texto_completo, str(audio_path))
             engine.runAndWait()
             engine.stop()
-            if audio_path.exists():
+            if Path(audio_path).exists():
                 print(f"[AUDIO]  pyttsx3 OK")
                 return str(audio_path)
         except Exception as e:
