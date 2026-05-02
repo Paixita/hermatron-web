@@ -78,55 +78,61 @@
                             </label>
                         </div>
                         
-                        <div id="vozSelector" class="voz-selector-container">
-                            <p class="small-label">Escoge la voz para el video:</p>
-                            <input type="hidden" id="vozSeleccionada" value="es-CO-GonzaloNeural">
-                            <div id="vozLista" class="voz-lista-scroll">
-                                <!-- Voces disponibles -->
-                                <div class="voz-item activo" data-voz="es-CO-GonzaloNeural" onclick="seleccionarVoz('es-CO-GonzaloNeural')">
-                                    <div class="voz-item-info">
-                                        <span class="voz-item-nombre">🇨🇴 Gonzalo (Claro)</span>
-                                        <span class="voz-item-region">Colombia - Recomendado</span>
+                        <details id="vozSelectorDetails" class="voz-selector-details" style="margin-top: 10px; border: 1px solid var(--borde); border-radius: 8px; padding: 10px; background: var(--fondo-terciario);">
+                            <summary class="voz-selector-summary" style="cursor: pointer; font-weight: 600; color: var(--texto); display: flex; align-items: center; justify-content: space-between;">
+                                <span>🗣️ Opciones de Voz</span>
+                                <span class="triangle" style="font-size: 0.8rem;">▼</span>
+                            </summary>
+                            <div id="vozSelector" class="voz-selector-container" style="margin-top: 15px;">
+                                <p class="small-label">Escoge la voz para el video:</p>
+                                <input type="hidden" id="vozSeleccionada" value="es-CO-GonzaloNeural">
+                                <div id="vozLista" class="voz-lista-scroll">
+                                    <!-- Voces disponibles -->
+                                    <div class="voz-item activo" data-voz="es-CO-GonzaloNeural" onclick="seleccionarVoz('es-CO-GonzaloNeural')">
+                                        <div class="voz-item-info">
+                                            <span class="voz-item-nombre">🇨🇴 Gonzalo (Claro)</span>
+                                            <span class="voz-item-region">Colombia - Recomendado</span>
+                                        </div>
+                                        <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-CO-GonzaloNeural', this)">▶️</button>
                                     </div>
-                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-CO-GonzaloNeural', this)">▶️</button>
-                                </div>
-                                <div class="voz-item" data-voz="es-MX-JorgeNeural" onclick="seleccionarVoz('es-MX-JorgeNeural')">
-                                    <div class="voz-item-info">
-                                        <span class="voz-item-nombre">🇲🇽 Jorge (Realista)</span>
-                                        <span class="voz-item-region">México</span>
+                                    <div class="voz-item" data-voz="es-MX-JorgeNeural" onclick="seleccionarVoz('es-MX-JorgeNeural')">
+                                        <div class="voz-item-info">
+                                            <span class="voz-item-nombre">🇲🇽 Jorge (Realista)</span>
+                                            <span class="voz-item-region">México</span>
+                                        </div>
+                                        <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-MX-JorgeNeural', this)">▶️</button>
                                     </div>
-                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-MX-JorgeNeural', this)">▶️</button>
-                                </div>
-                                <div class="voz-item" data-voz="es-ES-LuciaNeural" onclick="seleccionarVoz('es-ES-LuciaNeural')">
-                                    <div class="voz-item-info">
-                                        <span class="voz-item-nombre">🇪🇸 Lucía (Clara)</span>
-                                        <span class="voz-item-region">España</span>
+                                    <div class="voz-item" data-voz="es-ES-LuciaNeural" onclick="seleccionarVoz('es-ES-LuciaNeural')">
+                                        <div class="voz-item-info">
+                                            <span class="voz-item-nombre">🇪🇸 Lucía (Clara)</span>
+                                            <span class="voz-item-region">España</span>
+                                        </div>
+                                        <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-ES-LuciaNeural', this)">▶️</button>
                                     </div>
-                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-ES-LuciaNeural', this)">▶️</button>
-                                </div>
-                                <div class="voz-item" data-voz="es-AR-TomasNeural" onclick="seleccionarVoz('es-AR-TomasNeural')">
-                                    <div class="voz-item-info">
-                                        <span class="voz-item-nombre">🇦🇷 Tomás (Dinámico)</span>
-                                        <span class="voz-item-region">Argentina</span>
+                                    <div class="voz-item" data-voz="es-AR-TomasNeural" onclick="seleccionarVoz('es-AR-TomasNeural')">
+                                        <div class="voz-item-info">
+                                            <span class="voz-item-nombre">🇦🇷 Tomás (Dinámico)</span>
+                                            <span class="voz-item-region">Argentina</span>
+                                        </div>
+                                        <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-AR-TomasNeural', this)">▶️</button>
                                     </div>
-                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-AR-TomasNeural', this)">▶️</button>
-                                </div>
-                                <div class="voz-item" data-voz="es-ES-AlvaroNeural" onclick="seleccionarVoz('es-ES-AlvaroNeural')">
-                                    <div class="voz-item-info">
-                                        <span class="voz-item-nombre">🇪🇸 Álvaro (Profesional)</span>
-                                        <span class="voz-item-region">España</span>
+                                    <div class="voz-item" data-voz="es-ES-AlvaroNeural" onclick="seleccionarVoz('es-ES-AlvaroNeural')">
+                                        <div class="voz-item-info">
+                                            <span class="voz-item-nombre">🇪🇸 Álvaro (Profesional)</span>
+                                            <span class="voz-item-region">España</span>
+                                        </div>
+                                        <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-ES-AlvaroNeural', this)">▶️</button>
                                     </div>
-                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('es-ES-AlvaroNeural', this)">▶️</button>
-                                </div>
-                                <div class="voz-item" data-voz="pNInz6obpgDQGcFmaJgB" onclick="seleccionarVoz('pNInz6obpgDQGcFmaJgB')">
-                                    <div class="voz-item-info">
-                                        <span class="voz-item-nombre">💎 Adam (Premium)</span>
-                                        <span class="voz-item-region">ElevenLabs</span>
+                                    <div class="voz-item" data-voz="pNInz6obpgDQGcFmaJgB" onclick="seleccionarVoz('pNInz6obpgDQGcFmaJgB')">
+                                        <div class="voz-item-info">
+                                            <span class="voz-item-nombre">💎 Adam (Premium)</span>
+                                            <span class="voz-item-region">ElevenLabs</span>
+                                        </div>
+                                        <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('pNInz6obpgDQGcFmaJgB', this)">▶️</button>
                                     </div>
-                                    <button class="voz-btn-probar" title="Escuchar muestra" onclick="event.stopPropagation(); probarVoz('pNInz6obpgDQGcFmaJgB', this)">▶️</button>
                                 </div>
                             </div>
-                        </div>
+                        </details>
                     </div>
 
                     <button class="btn btn-primary btn-crear-video-studio" onclick="crearVideoDesdeStudio()">
@@ -177,12 +183,12 @@
                             Revisa las imágenes generadas. Si alguna no te gusta, cámbiala antes de renderizar el video final.
                         </p>
                         
-                        <div id="storyboardGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+                        <div id="storyboardGrid" style="display: flex; gap: 20px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: thin; scrollbar-color: var(--borde) var(--fondo-oscuro);">
                             <!-- Las tarjetas de escenas se inyectarán aquí -->
                         </div>
                     </div>
 
-                    <div id="previewVideoWrap" class="video-player-container" style="display:none">
+                    <div id="previewVideoWrap" class="video-player-container" style="display:none; margin-bottom: 20px;">
                         <div id="previewLoading" class="video-loading">
                             <div class="spinner-small"></div>
                             <span>Cargando video...</span>

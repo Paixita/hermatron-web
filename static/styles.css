@@ -2763,4 +2763,26 @@ input:checked + .slider:before {
     .welcome-icon {
         font-size: 3rem;
     }
+
+    /* Solución a texto de estado muy largo (ej. modelo de groq) */
+    #statusText {
+        max-width: 120px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: inline-block;
+        vertical-align: middle;
+    }
+
+    /* Reducir tamaño de botones en móvil para evitar solapamientos */
+    .header-actions .btn, .studio-actions-top .btn {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+    
+    .logo-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
 }

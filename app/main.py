@@ -55,6 +55,7 @@ class VideoRequest(BaseModel):
     descripcion: Optional[str] = ""
     voz: Optional[str] = "es-MX-JorgeNeural"
     estilo: Optional[str] = "cinematic"
+    formato: Optional[str] = "16:9"
 
 class ProbarVozRequest(BaseModel):
     voz: str
@@ -920,14 +921,16 @@ async def _proceso_ensamblar(proyecto_id: str):
 async def crear_video_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
     proyecto_id = f"proyecto_{int(time.time())}"
     generador_video.videos_dir.mkdir(exist_ok=True)
-    background_tasks.add_task(_proceso_crear_video, proyecto_id, req.tema, req.prompt + f" Estilo: {req.estilo}", req.voz)
+    tema_con_formato = f"{req.tema} ({req.formato})"
+    background_tasks.add_task(_proceso_crear_video, proyecto_id, tema_con_formato, req.prompt + f" Estilo: {req.estilo}", req.voz)
     return {"video_id": proyecto_id, "estado": "analizando"}
 
 @app.post("/api/video/pre-produccion")
 async def pre_produccion_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
     proyecto_id = f"proyecto_{int(time.time())}"
     generador_video.videos_dir.mkdir(exist_ok=True)
-    background_tasks.add_task(_proceso_pre_produccion, proyecto_id, req.tema, req.prompt + f" Estilo: {req.estilo}", req.voz)
+    tema_con_formato = f"{req.tema} ({req.formato})"
+    background_tasks.add_task(_proceso_pre_produccion, proyecto_id, tema_con_formato, req.prompt + f" Estilo: {req.estilo}", req.voz)
     return {"video_id": proyecto_id, "estado": "analizando"}
 
 class RegenerarImagenRequest(BaseModel):

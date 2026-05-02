@@ -1099,9 +1099,14 @@ Responde SOLO JSON:
                 if 'sabina' in v.name.lower() or 'es-' in v.id.lower():
                     engine.setProperty('voice', v.id)
                     break
-            engine.save_to_file(texto_completo, str(audio_path))
-            engine.runAndWait()
-            engine.stop()
+            def run_pyttsx3():
+                import pythoncom
+                pythoncom.CoInitialize()
+                engine.save_to_file(texto_completo, str(audio_path))
+                engine.runAndWait()
+                engine.stop()
+            
+            await asyncio.to_thread(run_pyttsx3)
             if Path(audio_path).exists():
                 print(f"[AUDIO]  pyttsx3 OK")
                 return str(audio_path)
@@ -1150,79 +1155,84 @@ Responde SOLO JSON:
         print(f"[VIDEO]  MoviePy: Ensamblando {len(imagenes)} imágenes")
 
         try:
-            # Monkey-patch para Pillow 10+ (MoviePy 1.0.3 usa ANTIALIAS que fue eliminado)
-            import PIL.Image
-            if not hasattr(PIL.Image, 'ANTIALIAS'):
-                PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
+            def do_assembly():
+                # Monkey-patch para Pillow 10+ (MoviePy 1.0.3 usa ANTIALIAS que fue eliminado)
+                import PIL.Image
+                if not hasattr(PIL.Image, 'ANTIALIAS'):
+                    PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
 
-            from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-            import moviepy.video.fx.all as vfx
-            
-            # Calcular duración por escena
-            dur_total = 10.0 # Por defecto
-            audio_clip = None
-            if audio_path and Path(audio_path).exists():
-                audio_clip = AudioFileClip(audio_path)
-                dur_total = audio_clip.duration
-            
-            dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
-            
-            # Crear clips de imagen con efecto Ken Burns (Zoom Dinámico)
-            # Detectar resolución nativa de las imágenes generadas
-            w, h = 2560, 1440
-            if imagenes:
-                try:
-                    with PIL.Image.open(imagenes[0]) as first_img:
-                        w, h = first_img.size
-                except Exception:
-                    pass
-        
-            clips = []
-            for i, img in enumerate(imagenes):
-                # 1. Cargar imagen y establecer duración
-                base_clip = ImageClip(img).set_duration(dur_escena + 1.0).resize(width=w, height=h)
+                from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                import moviepy.video.fx.all as vfx
                 
-                # 2. Generar subtítulo para la escena
-                texto_escena = escenas[i].get("texto_narracion", "") if i < len(escenas) else ""
-                if texto_escena and len(texto_escena) > 3:
-                    sub_clip = self._crear_clip_subtitulo(texto_escena, w, h, dur_escena + 1.0, work_dir, i)
-                    # Componer el subtítulo sobre la imagen base
-                    clip = CompositeVideoClip([base_clip, sub_clip.set_position("center")])
-                else:
-                    clip = base_clip
+                # Calcular duración por escena
+                dur_total = 10.0 # Por defecto
+                audio_clip = None
+                if audio_path and Path(audio_path).exists():
+                    audio_clip = AudioFileClip(audio_path)
+                    dur_total = audio_clip.duration
+                
+                dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
+                
+                # Crear clips de imagen con efecto Ken Burns (Zoom Dinámico)
+                # Detectar resolución nativa de las imágenes generadas
+                w, h = 2560, 1440
+                if imagenes:
+                    try:
+                        with PIL.Image.open(imagenes[0]) as first_img:
+                            w, h = first_img.size
+                    except Exception:
+                        pass
             
-                # 3. Fade suave entre escenas
-                if len(clips) > 0:
-                    clip = clip.crossfadein(0.5)
+                clips = []
+                for i, img in enumerate(imagenes):
+                    # 1. Cargar imagen y establecer duración
+                    base_clip = ImageClip(img).set_duration(dur_escena + 1.0).resize(width=w, height=h)
+                    
+                    # 2. Generar subtítulo para la escena
+                    texto_escena = escenas[i].get("texto_narracion", "") if i < len(escenas) else ""
+                    if texto_escena and len(texto_escena) > 3:
+                        sub_clip = self._crear_clip_subtitulo(texto_escena, w, h, dur_escena + 1.0, work_dir, i)
+                        # Componer el subtítulo sobre la imagen base
+                        clip = CompositeVideoClip([base_clip, sub_clip.set_position("center")])
+                    else:
+                        clip = base_clip
+                
+                    # 3. Fade suave entre escenas
+                    if len(clips) > 0:
+                        clip = clip.crossfadein(0.5)
+                
+                    clips.append(clip)
             
-                clips.append(clip)
-        
-            # Concatenar todos los clips usando 'compose' method para crossfades
-            video = concatenate_videoclips(clips, padding=-1.0, method="compose")
+                # Concatenar todos los clips usando 'compose' method para crossfades
+                video = concatenate_videoclips(clips, padding=-1.0, method="compose")
 
-            # Ajustar duración exacta al audio si existe
-            if audio_clip:
-                video = video.set_audio(audio_clip)
-                video = video.set_duration(audio_clip.duration)
-            else:
-                video = video.set_duration(dur_total)
-            
-            # Exportar archivo
-            video.write_videofile(
-                str(video_final), 
-                fps=24, 
-                codec='libx264', 
-                audio_codec='aac',
-                preset='fast',
-                threads=4,
-                logger=None # Evitar consola saturada
-            )
-            
-            # Liberar memoria de moviepy
-            if audio_clip: audio_clip.close()
-            video.close()
-            for c in clips: c.close()
-            
+                # Ajustar duración exacta al audio si existe
+                if audio_clip:
+                    video = video.set_audio(audio_clip)
+                    video = video.set_duration(audio_clip.duration)
+                else:
+                    video = video.set_duration(dur_total)
+                
+                # Exportar archivo en un hilo separado (ahora todo está en este hilo)
+                video.write_videofile(
+                    str(video_final), 
+                    fps=24, 
+                    codec='libx264', 
+                    audio_codec='aac',
+                    preset='fast',
+                    threads=4,
+                    logger=None # Evitar consola saturada
+                )
+                
+                # Liberar memoria de moviepy
+                if audio_clip: audio_clip.close()
+                video.close()
+                for c in clips: c.close()
+                
+                return str(video_final)
+
+            # Ejecutar toda la lógica síncrona en un hilo separado
+            await asyncio.to_thread(do_assembly)
             print(f"[VIDEO]  Video generado exitosamente en {video_final}")
             return str(video_final)
 
