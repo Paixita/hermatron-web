@@ -1037,32 +1037,29 @@ Responde SOLO JSON:
         texto_completo = " ".join(textos) if textos else guion[:500]
 
         # Intento 1: ElevenLabs
-        if ELEVENLABS_API_KEY and generar_voz_func:
+        if ELEVENLABS_API_KEY:
             try:
                 from app.voz_elevenlabs import generar_voz_elevenlabs
-                voz_map = {
-                    "es-MX-JorgeNeural": "pNInz6obpgDQGcFmaJgB",
-                    "es-MX-DaliaNeural": "EXAVITQu4vr4xnSDxMaL",
-                    "es-CO-GonzaloNeural": "pNInz6obpgDQGcFmaJgB",
-                    "es-CO-SalomeNeural": "EXAVITQu4vr4xnSDxMaL",
-                    "es-ES-AlvaroNeural": "pNInz6obpgDQGcFmaJgB",
-                    "es-ES-ElviraNeural": "EXAVITQu4vr4xnSDxMaL",
-                }
-                eleven_voz = voz_map.get(voz, "pNInz6obpgDQGcFmaJgB")
-                print(f"[AUDIO] Generando con ElevenLabs...")
-                ruta = await generar_voz_elevenlabs(
-                    texto_completo, eleven_voz, "audio_narracion.mp3", work_dir
-                )
-                print(f"[AUDIO]  ElevenLabs OK")
-                return ruta
+                # Si el id es de edge-tts (tiene guiones como es-MX), usar map inverso o saltar
+                if "-" in voz and voz not in ["pNInz6obpgDQGcFmaJgB", "EXAVITQu4vr4xnSDxMaL"]:
+                    pass # Saltar a edge-tts
+                else:
+                    print(f"[AUDIO] Generando con ElevenLabs ({voz})...")
+                    ruta = await generar_voz_elevenlabs(
+                        texto_completo, voz, "audio_narracion.mp3", work_dir
+                    )
+                    print(f"[AUDIO]  ElevenLabs OK")
+                    return ruta
             except Exception as e:
                 print(f"[AUDIO] Error ElevenLabs: {e}")
 
         # Intento 2: edge-tts
         try:
             import edge_tts
-            print(f"[AUDIO] Generando con edge-tts ({voz})...")
-            communicate = edge_tts.Communicate(texto_completo, voz, rate="-5%", volume="+5%")
+            # Si el id es de ElevenLabs, cambiar a uno default de edge-tts
+            edge_voz = voz if "-" in voz else "es-MX-JorgeNeural"
+            print(f"[AUDIO] Generando con edge-tts ({edge_voz})...")
+            communicate = edge_tts.Communicate(texto_completo, edge_voz, rate="-5%", volume="+5%")
             await communicate.save(str(audio_path))
             print(f"[AUDIO]  edge-tts OK")
             return str(audio_path)
