@@ -371,7 +371,10 @@ async function crearVideoDesdeStudio() {
                 progresoFill.style.width = pct + '%';
                 progresoPorcentaje.textContent = pct + '%';
 
-                if (pct < 20) {
+                if (progData.estado === 'en_cola') {
+                    progresoFill.style.background = '#6c757d';
+                    progresoEstado.innerHTML = `⏳ <strong>En cola...</strong> Esperando a que el servidor se libere.`;
+                } else if (pct < 20) {
                     progresoEstado.innerHTML = `🧠 Analizando y diseñando guion...`;
                 } else if (pct < 50) {
                     progresoFill.style.background = '#6f42c1';

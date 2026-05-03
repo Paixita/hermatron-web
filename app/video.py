@@ -28,6 +28,7 @@ THUMBNAILS_DIR.mkdir(exist_ok=True)
 
 # --- ESTADO DE VIDEO ---
 class VideoEstado(str, Enum):
+    EN_COLA = "en_cola"
     ANALIZANDO = "analizando"
     DISENANDO = "disenando"
     EN_REVIEW = "en_review"

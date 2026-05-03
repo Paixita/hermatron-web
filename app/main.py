@@ -868,28 +868,41 @@ async def limpiar_cache():
         return {"status": "success", "message": f"Carpetas limpiadas: {count}"}
     except Exception as e: return {"status": "error", "message": str(e)}
 
+# Cola Global para evitar colapsos por falta de memoria (Solo 1 render a la vez)
+video_semaphore = asyncio.Semaphore(1)
+
 async def _proceso_crear_video(proyecto_id: str, tema: str, prompt: str, voz: str):
     try:
-        await generador_video.analizar_tema(tema, prompt, client, proyecto_id=proyecto_id)
-        await generador_video.disenar_escenas(proyecto_id, client)
+        # Notificar que está en cola si hay alguien más renderizando
+        if video_semaphore.locked():
+            generador_video._actualizar_estado(proyecto_id, VideoEstado.EN_COLA)
+            generador_video._actualizar_progreso(proyecto_id, 2)
+            
+        async with video_semaphore:
+            # Una vez es su turno, comienza
+            generador_video._actualizar_estado(proyecto_id, VideoEstado.ANALIZANDO)
+            generador_video._actualizar_progreso(proyecto_id, 5)
+            
+            await generador_video.analizar_tema(tema, prompt, client, proyecto_id=proyecto_id)
+            await generador_video.disenar_escenas(proyecto_id, client)
+            
+            # Guardar la voz elegida en el proyecto
+            proyecto = generador_video.obtener_proyecto(proyecto_id)
+            if hasattr(generador_video, '_cargar_proyecto'):
+                proj_obj = generador_video._cargar_proyecto(proyecto_id)
+                if proj_obj:
+                    proj_obj.voz = voz
+                    generador_video._guardar_proyecto(proj_obj)
+            
+            # Aprobar todas por defecto para el flujo automatizado
+            for escena in proyecto.get('escenas_disenadas', []):
+                generador_video.aprobar_escena(proyecto_id, escena['numero'])
         
-        # Guardar la voz elegida en el proyecto
-        proyecto = generador_video.obtener_proyecto(proyecto_id)
-        if hasattr(generador_video, '_cargar_proyecto'):
-            proj_obj = generador_video._cargar_proyecto(proyecto_id)
-            if proj_obj:
-                proj_obj.voz = voz
-                generador_video._guardar_proyecto(proj_obj)
-        
-        # Aprobar todas por defecto para el flujo automatizado
-        for escena in proyecto.get('escenas_disenadas', []):
-            generador_video.aprobar_escena(proyecto_id, escena['numero'])
-        
-        await generador_video.producir_video(
-            proyecto_id=proyecto_id, 
-            groq_client=client, 
-            generar_voz_func=None
-        )
+            await generador_video.producir_video(
+                proyecto_id=proyecto_id, 
+                groq_client=client, 
+                generar_voz_func=None
+            )
     except Exception as e:
         print(f"Error en video background: {e}")
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
