@@ -1173,13 +1173,17 @@ Responde SOLO JSON:
                 
                 dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
                 
-                # Crear clips de imagen con efecto Ken Burns (Zoom Dinámico)
-                # Detectar resolución nativa de las imágenes generadas
-                w, h = 2560, 1440
+                # Detectar resolución nativa de las imágenes generadas y REDUCIR para evitar OOM en Render (512MB RAM)
+                w, h = 1280, 720
                 if imagenes:
                     try:
                         with PIL.Image.open(imagenes[0]) as first_img:
-                            w, h = first_img.size
+                            orig_w, orig_h = first_img.size
+                            # Escalar a máximo 720p manteniendo proporción
+                            if orig_w > orig_h: # Horizontal 16:9
+                                w, h = 1280, 720
+                            else: # Vertical 9:16
+                                w, h = 720, 1280
                     except Exception:
                         pass
             
@@ -1197,14 +1201,10 @@ Responde SOLO JSON:
                     else:
                         clip = base_clip
                 
-                    # 3. Fade suave entre escenas
-                    if len(clips) > 0:
-                        clip = clip.crossfadein(0.5)
-                
                     clips.append(clip)
             
-                # Concatenar todos los clips usando 'compose' method para crossfades
-                video = concatenate_videoclips(clips, padding=-1.0, method="compose")
+                # Concatenar todos los clips usando cortes duros (menos memoria)
+                video = concatenate_videoclips(clips)
 
                 # Ajustar duración exacta al audio si existe
                 if audio_clip:
@@ -1219,8 +1219,8 @@ Responde SOLO JSON:
                     fps=24, 
                     codec='libx264', 
                     audio_codec='aac',
-                    preset='fast',
-                    threads=4,
+                    preset='ultrafast',
+                    threads=1, # IMPORTANTE: 1 hilo para evitar sobrecarga en Render Free
                     logger=None # Evitar consola saturada
                 )
                 
