@@ -35,6 +35,7 @@ from typing import Optional
 
 # 2. Importes de tu proyecto
 from .config import GROQ_API_KEY, GROQ_MODEL, GROQ_MODEL_VISION, GROQ_MODEL_VISION_LARGE, HOST, PORT, DEBUG, TTS_VOICE, AUDIO_DIR
+from .config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_MODEL, LLM_PROVIDER
 from .memoria import memoria
 from .voz import generador_voz
 from .busqueda import buscador 
@@ -288,6 +289,9 @@ async def catch_exceptions_middleware(request: Request, call_next):
         return JSONResponse(status_code=500, content={"detail": f"Error interno: {str(e)}"})
 
 client = None
+openrouter_client = None
+
+# --- Cliente Groq ---
 if GROQ_API_KEY:
     try:
         client = Groq(api_key=GROQ_API_KEY)
@@ -296,6 +300,30 @@ if GROQ_API_KEY:
         print(f"❌ Error inicializando cliente Groq: {e}")
 else:
     print("⚠️ GROQ_API_KEY no detectada. El sistema funcionará en modo limitado.")
+
+# --- Cliente OpenRouter (compatible con OpenAI SDK) ---
+if OPENROUTER_API_KEY:
+    try:
+        from openai import AsyncOpenAI
+        openrouter_client = AsyncOpenAI(
+            api_key=OPENROUTER_API_KEY,
+            base_url=OPENROUTER_BASE_URL,
+            default_headers={
+                "HTTP-Referer": "https://hermatron.onrender.com",
+                "X-Title": "HERMATRON AI",
+            }
+        )
+        print(f"✅ Cliente OpenRouter inicializado. Modelo: {OPENROUTER_MODEL}")
+    except Exception as e:
+        print(f"❌ Error inicializando cliente OpenRouter: {e}")
+else:
+    print("⚠️ OPENROUTER_API_KEY no detectada.")
+
+# Proveedor activo para el chat
+if LLM_PROVIDER == "openrouter" and openrouter_client:
+    print(f"🧠 [LLM] Proveedor activo: OpenRouter ({OPENROUTER_MODEL})")
+else:
+    print(f"🧠 [LLM] Proveedor activo: Groq ({GROQ_MODEL})")
 
 # Evitar caché agresivo en desarrollo (principalmente JS/CSS)
 @app.middleware("http")
@@ -494,8 +522,11 @@ async def video_studio(request: Request, current_user: dict = Depends(auth.get_c
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
-    if not client: raise HTTPException(status_code=500, detail="API key no configurada")
-    print(f"[CHAT] generar_audio={chat_request.generar_audio} calidad_audio={chat_request.calidad_audio} voz_id={chat_request.voz_id}")
+    # Selección de proveedor LLM: OpenRouter tiene prioridad si está configurado y activo
+    usar_openrouter = (LLM_PROVIDER == "openrouter" and openrouter_client is not None)
+    if not usar_openrouter and not client:
+        raise HTTPException(status_code=500, detail="Ningún proveedor LLM configurado (Groq/OpenRouter)")
+    print(f"[CHAT] proveedor={'OpenRouter' if usar_openrouter else 'Groq'} generar_audio={chat_request.generar_audio} calidad_audio={chat_request.calidad_audio} voz_id={chat_request.voz_id}")
     
     if chat_request.conversacion_id != "default":
         conversaciones = await memoria.obtener_conversaciones()
@@ -516,12 +547,22 @@ async def chat(chat_request: ChatRequest):
             "content": "IMPORTANTE: NUNCA uses etiquetas como <function=...>. Si necesitas usar una herramienta, usa SOLO el formato JSON nativo de tool_calls que te provee la API."
         })
         
-        chat_completion = client.chat.completions.create(
-            messages=mensajes_groq, model=GROQ_MODEL, temperature=0.2, max_tokens=2048,
-            tools=herramientas_groq, tool_choice="auto"
-        )
-        
-        mensaje_respuesta = chat_completion.choices[0].message
+        # ---- Llamada al LLM (Groq o OpenRouter) ----
+        if usar_openrouter:
+            completion_or = await openrouter_client.chat.completions.create(
+                messages=mensajes_groq,
+                model=OPENROUTER_MODEL,
+                temperature=0.2,
+                max_tokens=2048,
+            )
+            mensaje_respuesta = completion_or.choices[0].message
+        else:
+            chat_completion = client.chat.completions.create(
+                messages=mensajes_groq, model=GROQ_MODEL, temperature=0.2, max_tokens=2048,
+                tools=herramientas_groq, tool_choice="auto"
+            )
+            mensaje_respuesta = chat_completion.choices[0].message
+
         
         if getattr(mensaje_respuesta, 'tool_calls', None):
             print("🧠 [CEREBRO AUTÓNOMO] Activando herramientas...")
@@ -559,8 +600,14 @@ async def chat(chat_request: ChatRequest):
                 
                 mensajes_groq.append({"role": "tool", "tool_call_id": tool_call.id, "name": nombre_funcion, "content": resultado_datos})
             
-            chat_completion_final = client.chat.completions.create(messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048)
-            respuesta = chat_completion_final.choices[0].message.content
+            if usar_openrouter:
+                comp_final = await openrouter_client.chat.completions.create(
+                    messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
+                )
+                respuesta = comp_final.choices[0].message.content
+            else:
+                chat_completion_final = client.chat.completions.create(messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048)
+                respuesta = chat_completion_final.choices[0].message.content
         else:
             # Fallback: a veces el modelo devuelve un "tool call" en texto.
             # Si detectamos JSON tipo {"type":"function","name":"...","parameters":{...}},
@@ -591,10 +638,16 @@ async def chat(chat_request: ChatRequest):
 
                         mensajes_groq.append({"role": "assistant", "content": contenido})
                         mensajes_groq.append({"role": "user", "content": f"[SISTEMA] El resultado de la herramienta '{nombre}' fue:\n{json.dumps(tool_res)}\n\nUsa esta información para responder a mi pregunta anterior de forma natural."})
-                        chat_completion_final = client.chat.completions.create(
-                            messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
-                        )
-                        respuesta = chat_completion_final.choices[0].message.content
+                        if usar_openrouter:
+                            comp_fb = await openrouter_client.chat.completions.create(
+                                messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
+                            )
+                            respuesta = comp_fb.choices[0].message.content
+                        else:
+                            chat_completion_final = client.chat.completions.create(
+                                messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
+                            )
+                            respuesta = chat_completion_final.choices[0].message.content
             except Exception as e:
                 print(f"❌ [TOOL-FALLBACK ERROR] {e}")
 
@@ -766,11 +819,44 @@ async def listar_voces():
 # --- AQUÍ ESTÁ LA CORRECCIÓN DEL LETRERO ROJO ---
 @app.get("/api/health")
 async def health_check(): 
+    # Intentar obtener uso de memoria (Linux/Render)
+    mem_info = {}
+    try:
+        if os.name == "posix": # Linux/Render
+            # Intentar Cgroups v2 (lo más común ahora)
+            if os.path.exists("/sys/fs/cgroup/memory.max"):
+                with open("/sys/fs/cgroup/memory.max", "r") as f:
+                    mem_info["total"] = f"{int(f.read().strip()) // (1024*1024)} MB"
+                with open("/sys/fs/cgroup/memory.current", "r") as f:
+                    mem_info["uso_actual"] = f"{int(f.read().strip()) // (1024*1024)} MB"
+            elif os.path.exists("/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+                # Cgroups v1 (antiguo)
+                with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+                    mem_info["total"] = f"{int(f.read().strip()) // (1024*1024)} MB"
+                with open("/sys/fs/cgroup/memory/memory.usage_in_bytes", "r") as f:
+                    mem_info["uso_actual"] = f"{int(f.read().strip()) // (1024*1024)} MB"
+        else:
+            # Fallback para Windows (requiere psutil)
+            try:
+                import psutil
+                vm = psutil.virtual_memory()
+                mem_info["total"] = f"{vm.total // (1024*1024)} MB"
+                mem_info["disponible"] = f"{vm.available // (1024*1024)} MB"
+                mem_info["porcentaje"] = f"{vm.percent}%"
+            except ImportError:
+                mem_info["status"] = "psutil no instalado (usado para monitoreo local)"
+    except Exception as e:
+        mem_info["error"] = str(e)
+
     return {
         "status": "healthy", 
         "groq_configured": bool(GROQ_API_KEY), 
         "model": GROQ_MODEL,
-        "vision_model": GROQ_MODEL_VISION
+        "vision_model": GROQ_MODEL_VISION,
+        "sistema": {
+            "plataforma": sys.platform,
+            "memoria": mem_info
+        }
     }
 
 @app.get("/api/modos")

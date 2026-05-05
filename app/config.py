@@ -16,6 +16,13 @@ load_dotenv(BASE_DIR / ".env")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+# Configuración de OpenRouter (proveedor alternativo con +200 modelos)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+# Indica qué proveedor usa el chat principal: "groq" o "openrouter"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
+
 # Modelos de visión disponibles en Groq
 # NOTA: Los modelos llama-3.2-*-vision fueron DECOMISIONADOS por Groq.
 # Llama 4 Scout es el modelo multimodal actual que soporta imágenes.

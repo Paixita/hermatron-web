@@ -760,6 +760,10 @@ Responde SOLO JSON:
         
         self._guardar_proyecto(proyecto)
         print(f"[VIDEO]  {total} escenas procesadas y guardadas")
+        
+        # Forzar liberación de memoria tras procesar muchas imágenes
+        import gc
+        gc.collect()
 
     async def _generar_imagen_pollinations(self, query: str, ruta_salida: str, width: int = 2560, height: int = 1440) -> bool:
         """Generar imagen usando Pollinations.ai con reintentos y sanitización"""
@@ -1137,7 +1141,7 @@ Responde SOLO JSON:
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
                                 audio_path: Optional[str], escenas: list) -> Optional[str]:
-        """Ensamblar video con MoviePy (Efecto Ken Burns, Crossfades y Audio)"""
+        """Ensamblar video con FFmpeg nativo (Optimizado para 512MB RAM)"""
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
         
         imagenes = []
@@ -1147,130 +1151,137 @@ Responde SOLO JSON:
             if not img.exists():
                 img = work_dir / f"escena_{num_escena}" / "imagen.png"
             if img.exists():
-                imagenes.append(str(img))
+                imagenes.append((str(img), escena.get("texto_narracion", "")))
 
         if not imagenes:
             print("[VIDEO]  Sin imágenes")
             return None
 
-        print(f"[VIDEO]  MoviePy: Ensamblando {len(imagenes)} imágenes")
+        print(f"[VIDEO]  FFmpeg: Ensamblando {len(imagenes)} imágenes")
 
         try:
-            def do_assembly():
-                # Monkey-patch para Pillow 10+ (MoviePy 1.0.3 usa ANTIALIAS que fue eliminado)
-                import PIL.Image
-                if not hasattr(PIL.Image, 'ANTIALIAS'):
-                    PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
+            import PIL.Image
+            
+            # Calcular duración
+            dur_total = 10.0 # Por defecto
+            if audio_path and Path(audio_path).exists():
+                dur_total = self._obtener_duracion_audio(audio_path)
+                if dur_total <= 0: dur_total = 10.0
+            
+            dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
+            
+            # Detectar resolución base y escalar a 720p máximo para ahorrar RAM
+            w, h = 1280, 720
+            try:
+                with PIL.Image.open(imagenes[0][0]) as first_img:
+                    orig_w, orig_h = first_img.size
+                    if orig_w > orig_h: # Horizontal 16:9
+                        w, h = 1280, 720
+                    else: # Vertical 9:16
+                        w, h = 720, 1280
+            except Exception:
+                pass
 
-                from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-                import moviepy.video.fx.all as vfx
+            # Generar imágenes compuestas
+            imagenes_finales = []
+            for i, (img_path, texto) in enumerate(imagenes):
+                final_path = work_dir / f"frame_final_{i}.jpg"
+                self._crear_imagen_subtitulada(img_path, texto, w, h, str(final_path))
+                imagenes_finales.append(str(final_path))
+
+            # Crear archivo concat.txt (escapar paths para FFmpeg en Windows/Linux)
+            concat_path = work_dir / "concat.txt"
+            with open(concat_path, "w", encoding="utf-8") as f:
+                for img_final in imagenes_finales:
+                    safe_path = img_final.replace("\\", "/")
+                    f.write(f"file '{safe_path}'\n")
+                    f.write(f"duration {dur_escena:.2f}\n")
+                # FFmpeg concat quirk: repetir la última imagen
+                safe_last_path = imagenes_finales[-1].replace("\\", "/")
+                f.write(f"file '{safe_last_path}'\n")
+            
+            # Comando FFmpeg
+            ffmpeg_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_path)]
+            if audio_path and Path(audio_path).exists():
+                ffmpeg_cmd.extend(["-i", str(audio_path)])
                 
-                # Calcular duración por escena
-                dur_total = 10.0 # Por defecto
-                audio_clip = None
-                if audio_path and Path(audio_path).exists():
-                    audio_clip = AudioFileClip(audio_path)
-                    dur_total = audio_clip.duration
+            ffmpeg_cmd.extend([
+                "-c:v", "libx264", 
+                "-preset", "ultrafast", 
+                "-pix_fmt", "yuv420p",
+                "-vf", "fps=24",
+                "-threads", "1" # Límite para Render
+            ])
+            
+            if audio_path and Path(audio_path).exists():
+                ffmpeg_cmd.extend(["-c:a", "aac", "-shortest"])
                 
-                dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
+            ffmpeg_cmd.append(str(video_final))
+            
+            # Ejecutar FFmpeg
+            print(f"[VIDEO] Ejecutando FFmpeg...")
+            success, err = await asyncio.to_thread(self._run_ffmpeg, ffmpeg_cmd)
+            
+            if success and video_final.exists():
+                print(f"[VIDEO]  Video generado exitosamente en {video_final}")
                 
-                # Detectar resolución nativa de las imágenes generadas y REDUCIR para evitar OOM en Render (512MB RAM)
-                w, h = 1280, 720
-                if imagenes:
+                # Limpiar temporales
+                for img_final in imagenes_finales:
                     try:
-                        with PIL.Image.open(imagenes[0]) as first_img:
-                            orig_w, orig_h = first_img.size
-                            # Escalar a máximo 720p manteniendo proporción
-                            if orig_w > orig_h: # Horizontal 16:9
-                                w, h = 1280, 720
-                            else: # Vertical 9:16
-                                w, h = 720, 1280
-                    except Exception:
-                        pass
-            
-                clips = []
-                for i, img in enumerate(imagenes):
-                    # 1. Cargar imagen y establecer duración
-                    base_clip = ImageClip(img).set_duration(dur_escena + 1.0).resize(width=w, height=h)
+                        Path(img_final).unlink(missing_ok=True)
+                    except: pass
+                try:
+                    concat_path.unlink(missing_ok=True)
+                except: pass
                     
-                    # 2. Generar subtítulo para la escena
-                    texto_escena = escenas[i].get("texto_narracion", "") if i < len(escenas) else ""
-                    if texto_escena and len(texto_escena) > 3:
-                        sub_clip = self._crear_clip_subtitulo(texto_escena, w, h, dur_escena + 1.0, work_dir, i)
-                        # Componer el subtítulo sobre la imagen base
-                        clip = CompositeVideoClip([base_clip, sub_clip.set_position("center")])
-                    else:
-                        clip = base_clip
-                
-                    clips.append(clip)
-            
-                # Concatenar todos los clips usando cortes duros (menos memoria)
-                video = concatenate_videoclips(clips)
-
-                # Ajustar duración exacta al audio si existe
-                if audio_clip:
-                    video = video.set_audio(audio_clip)
-                    video = video.set_duration(audio_clip.duration)
-                else:
-                    video = video.set_duration(dur_total)
-                
-                # Exportar archivo en un hilo separado (ahora todo está en este hilo)
-                video.write_videofile(
-                    str(video_final), 
-                    fps=24, 
-                    codec='libx264', 
-                    audio_codec='aac',
-                    preset='ultrafast',
-                    threads=1, # IMPORTANTE: 1 hilo para evitar sobrecarga en Render Free
-                    logger=None # Evitar consola saturada
-                )
-                
-                # Liberar memoria de moviepy
-                if audio_clip: audio_clip.close()
-                video.close()
-                for c in clips: c.close()
-                
+                # Forzar liberación de memoria
+                import gc
+                gc.collect()
+                    
                 return str(video_final)
-
-            # Ejecutar toda la lógica síncrona en un hilo separado
-            await asyncio.to_thread(do_assembly)
-            print(f"[VIDEO]  Video generado exitosamente en {video_final}")
-            return str(video_final)
+            else:
+                print(f"[VIDEO] Error en FFmpeg: {err}")
+                return None
 
         except Exception as e:
-            print(f"[VIDEO]  Error con MoviePy: {e}")
+            print(f"[VIDEO]  Error en ensamblaje: {e}")
             import traceback
             traceback.print_exc()
             return None
 
-
-    def _crear_clip_subtitulo(self, texto: str, w: int, h: int, duracion: float, work_dir: Path, idx: int) -> "ImageClip":
-        """Crear clip de imagen transparente con texto (evita usar ImageMagick)"""
-        from PIL import Image, ImageDraw, ImageFont
+    def _crear_imagen_subtitulada(self, img_path: str, texto: str, w: int, h: int, output_path: str):
+        """Crear frame con imagen base y subtítulos usando PIL (evita MoviePy)"""
+        import PIL.Image
+        import PIL.ImageDraw
+        import PIL.ImageFont
         import textwrap
         
-        # Imagen transparente
-        img = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
+        # Cargar imagen base y redimensionar
+        with PIL.Image.open(img_path) as img_base:
+            img = img_base.convert("RGB").resize((w, h), PIL.Image.Resampling.LANCZOS)
+            
+        if not texto or len(texto) < 3:
+            img.save(output_path, "JPEG", quality=90)
+            return
+            
+        draw = PIL.ImageDraw.Draw(img)
         
-        # Intentar cargar una fuente bonita, si no, usa la por defecto
+        # Intentar cargar una fuente bonita
         try:
-            # Usar una fuente grande
-            font_size = int(h * 0.05) # 5% de la pantalla
-            font = ImageFont.truetype("arial.ttf", font_size)
+            font_size = int(h * 0.05)
+            font = PIL.ImageFont.truetype("arial.ttf", font_size)
         except:
-            font = ImageFont.load_default()
+            font = PIL.ImageFont.load_default()
             font_size = 40
             
-        # Dividir texto largo en líneas
-        caracteres_por_linea = 40
+        # Dividir texto largo
+        caracteres_por_linea = 40 if w > h else 25 # Ajuste para vertical
         lineas = textwrap.wrap(texto, width=caracteres_por_linea)
         
-        # Dibujar líneas en la parte inferior (80% de la altura)
         y_start = int(h * 0.80)
         
         for i, linea in enumerate(lineas):
-            # Obtener el cuadro delimitador del texto
+            # Calcular tamaño de texto
             bbox = draw.textbbox((0, 0), linea, font=font)
             text_w = bbox[2] - bbox[0]
             text_h = bbox[3] - bbox[1]
@@ -1278,21 +1289,16 @@ Responde SOLO JSON:
             x = (w - text_w) // 2
             y = y_start + (i * (text_h + 10))
             
-            # Dibujar borde negro para que resalte
-            grosor = 3
+            # Dibujar borde negro
+            grosor = max(2, int(font_size * 0.05))
             for dx in range(-grosor, grosor+1):
                 for dy in range(-grosor, grosor+1):
-                    draw.text((x+dx, y+dy), linea, font=font, fill=(0,0,0,255))
+                    draw.text((x+dx, y+dy), linea, font=font, fill=(0,0,0))
                     
-            # Dibujar texto blanco encima
-            draw.text((x, y), linea, font=font, fill=(255,255,255,255))
+            # Dibujar texto blanco
+            draw.text((x, y), linea, font=font, fill=(255,255,255))
             
-        # Guardar temporal
-        temp_path = work_dir / f"sub_{idx}.png"
-        img.save(temp_path)
-        
-        from moviepy.editor import ImageClip
-        return ImageClip(str(temp_path)).set_duration(duracion)
+        img.save(output_path, "JPEG", quality=90)
 
     async def _verificar_ffmpeg(self) -> Optional[str]:
         try:
