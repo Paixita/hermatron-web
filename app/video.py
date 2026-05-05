@@ -1100,12 +1100,13 @@ Responde SOLO JSON:
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
                                 audio_path: Optional[str], escenas: list) -> Optional[str]:
-        """Ensamblar video con FFmpeg nativo (Optimizado para 512MB RAM)"""
+        """Ensamblar video con Ken Burns zoom + subtítulos sincronizados (FFmpeg nativo)"""
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
-        
+
+        # ── Recopilar imágenes ────────────────────────────────────────
         imagenes = []
         for i, escena in enumerate(escenas):
-            num_escena = escena.get("numero", i+1)
+            num_escena = escena.get("numero", i + 1)
             img = work_dir / f"escena_{num_escena}" / "imagen.jpg"
             if not img.exists():
                 img = work_dir / f"escena_{num_escena}" / "imagen.png"
@@ -1113,10 +1114,10 @@ Responde SOLO JSON:
                 imagenes.append((str(img), escena.get("texto_narracion", "")))
 
         if not imagenes:
-            print("[VIDEO]  Sin imágenes")
+            print("[VIDEO] Sin imágenes")
             return None
 
-        print(f"[VIDEO]  FFmpeg: Ensamblando {len(imagenes)} imágenes")
+        print(f"[VIDEO] Ensamblando {len(imagenes)} escenas con zoom + SRT...")
 
         try:
             import PIL.Image
@@ -1141,123 +1142,161 @@ Responde SOLO JSON:
             except Exception:
                 pass
 
-            # Generar imágenes compuestas
-            imagenes_finales = []
-            for i, (img_path, texto) in enumerate(imagenes):
-                final_path = work_dir / f"frame_final_{i}.jpg"
-                self._crear_imagen_subtitulada(img_path, texto, w, h, str(final_path))
-                imagenes_finales.append(str(final_path))
+            fps = 20  # Conservador para Render (512MB RAM)
 
-            # Crear archivo concat.txt (escapar paths para FFmpeg en Windows/Linux)
-            concat_path = work_dir / "concat.txt"
+            # ── PASO 1: clip por escena con Ken Burns ─────────────────
+            clips = []
+            sw = int(w * 1.15); sw = sw if sw % 2 == 0 else sw + 1
+            sh = int(h * 1.15); sh = sh if sh % 2 == 0 else sh + 1
+            d_frames = int(dur_escena * fps)
+
+            for i, (img_path, _) in enumerate(imagenes):
+                clip_path = work_dir / f"clip_{i:02d}.mp4"
+                zoom_expr = "min(zoom+0.0006,1.12)" if i % 2 == 0 else "max(1.12-0.0006*on,1.001)"
+                vf_zoom = (
+                    f"scale={sw}:{sh}:force_original_aspect_ratio=fill,"
+                    f"crop={sw}:{sh},"
+                    f"zoompan=z='{zoom_expr}':d={d_frames}:"
+                    f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps={fps},"
+                    f"scale={w}:{h}"
+                )
+                cmd_clip = [
+                    "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.3f}",
+                    "-i", img_path, "-vf", vf_zoom,
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                    "-t", f"{dur_escena:.3f}", str(clip_path)
+                ]
+                ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_clip)
+                if ok and clip_path.exists():
+                    clips.append(str(clip_path))
+                else:
+                    print(f"[VIDEO] zoompan falló escena {i} → estática: {err[:80]}")
+                    cmd_st = [
+                        "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.3f}",
+                        "-i", img_path,
+                        "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}",
+                        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                        "-t", f"{dur_escena:.3f}", str(clip_path)
+                    ]
+                    ok2, _ = await asyncio.to_thread(self._run_ffmpeg, cmd_st)
+                    if ok2: clips.append(str(clip_path))
+
+            if not clips:
+                print("[VIDEO] No se generó ningún clip"); return None
+
+            # ── PASO 2: concatenar clips ──────────────────────────────
+            concat_path = work_dir / "clips.txt"
             with open(concat_path, "w", encoding="utf-8") as f:
-                for img_final in imagenes_finales:
-                    safe_path = img_final.replace("\\", "/")
-                    f.write(f"file '{safe_path}'\n")
-                    f.write(f"duration {dur_escena:.2f}\n")
-                # FFmpeg concat quirk: repetir la última imagen
-                safe_last_path = imagenes_finales[-1].replace("\\", "/")
-                f.write(f"file '{safe_last_path}'\n")
-            
-            # Comando FFmpeg
-            ffmpeg_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_path)]
-            if audio_path and Path(audio_path).exists():
-                ffmpeg_cmd.extend(["-i", str(audio_path)])
-                
-            ffmpeg_cmd.extend([
-                "-c:v", "libx264", 
-                "-preset", "ultrafast", 
-                "-pix_fmt", "yuv420p",
-                "-vf", "fps=24",
-                "-threads", "1" # Límite para Render
+                for c in clips:
+                    f.write(f"file '{c.replace(chr(92), '/')}'\n")
+
+            video_base = work_dir / "video_base.mp4"
+            ok, err = await asyncio.to_thread(self._run_ffmpeg, [
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-i", str(concat_path), "-c", "copy", str(video_base)
             ])
-            
+            if not ok or not video_base.exists():
+                print(f"[VIDEO] Concat error: {err[:150]}"); return None
+
+            # ── PASO 3: SRT sincronizado ──────────────────────────────
+            srt_path = work_dir / "subtitulos.srt"
+            srt_path.write_text(self._generar_srt(imagenes, dur_escena), encoding="utf-8")
+
+            # ── PASO 4: audio + subtítulos ────────────────────────────
+            font_size = max(16, int(h * 0.025))   # 2.5% del alto → ~18px en 720p
+            srt_esc = str(srt_path).replace("\\", "/")
+            if os.name == "nt":
+                srt_esc = srt_esc.replace(":", "\\:")
+
+            sub_style = (
+                f"FontName=Arial,FontSize={font_size},"
+                f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
+                f"BackColour=&H99000000,Outline=1,Shadow=0,"
+                f"BorderStyle=4,Alignment=2,MarginV=25"
+            )
+
+            cmd_final = ["ffmpeg", "-y", "-i", str(video_base)]
             if audio_path and Path(audio_path).exists():
-                ffmpeg_cmd.extend(["-c:a", "aac", "-shortest"])
-                
-            ffmpeg_cmd.append(str(video_final))
-            
-            # Ejecutar FFmpeg
-            print(f"[VIDEO] Ejecutando FFmpeg...")
-            success, err = await asyncio.to_thread(self._run_ffmpeg, ffmpeg_cmd)
-            
-            if success and video_final.exists():
-                print(f"[VIDEO]  Video generado exitosamente en {video_final}")
-                
-                # Limpiar temporales
-                for img_final in imagenes_finales:
-                    try:
-                        Path(img_final).unlink(missing_ok=True)
-                    except: pass
-                try:
-                    concat_path.unlink(missing_ok=True)
+                cmd_final += ["-i", str(audio_path)]
+            cmd_final += [
+                "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-threads", "1"
+            ]
+            if audio_path and Path(audio_path).exists():
+                cmd_final += ["-c:a", "aac", "-shortest"]
+            cmd_final.append(str(video_final))
+
+            print("[VIDEO] Aplicando SRT + audio...")
+            ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_final)
+
+            # Fallback sin subtítulos si libass no está disponible
+            if not ok or not video_final.exists():
+                print(f"[VIDEO] subtitles filter falló → sin subtítulos: {err[:100]}")
+                cmd_ns = ["ffmpeg", "-y", "-i", str(video_base)]
+                if audio_path and Path(audio_path).exists():
+                    cmd_ns += ["-i", str(audio_path), "-c:a", "aac", "-shortest"]
+                cmd_ns += ["-c:v", "copy", str(video_final)]
+                ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_ns)
+
+            # ── Limpieza ─────────────────────────────────────────────
+            for c in clips:
+                try: Path(c).unlink(missing_ok=True)
                 except: pass
-                    
-                # Forzar liberación de memoria
-                import gc
-                gc.collect()
-                    
+            for tmp in [concat_path, video_base]:
+                try: tmp.unlink(missing_ok=True)
+                except: pass
+            import gc; gc.collect()
+
+            if ok and video_final.exists():
+                print(f"[VIDEO] Completado: {video_final}")
                 return str(video_final)
             else:
-                print(f"[VIDEO] Error en FFmpeg: {err}")
-                return None
+                print(f"[VIDEO] Error final: {err[:200]}"); return None
 
         except Exception as e:
-            print(f"[VIDEO]  Error en ensamblaje: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[VIDEO] Excepción en ensamblaje: {e}")
+            import traceback; traceback.print_exc()
             return None
 
-    def _crear_imagen_subtitulada(self, img_path: str, texto: str, w: int, h: int, output_path: str):
-        """Crear frame con imagen base y subtítulos usando PIL (evita MoviePy)"""
-        import PIL.Image
-        import PIL.ImageDraw
-        import PIL.ImageFont
-        import textwrap
-        
-        # Cargar imagen base y redimensionar
-        with PIL.Image.open(img_path) as img_base:
-            img = img_base.convert("RGB").resize((w, h), PIL.Image.Resampling.LANCZOS)
-            
-        if not texto or len(texto) < 3:
-            img.save(output_path, "JPEG", quality=90)
-            return
-            
-        draw = PIL.ImageDraw.Draw(img)
-        
-        # Intentar cargar una fuente bonita
-        try:
-            font_size = int(h * 0.05)
-            font = PIL.ImageFont.truetype("arial.ttf", font_size)
-        except:
-            font = PIL.ImageFont.load_default()
-            font_size = 40
-            
-        # Dividir texto largo
-        caracteres_por_linea = 40 if w > h else 25 # Ajuste para vertical
-        lineas = textwrap.wrap(texto, width=caracteres_por_linea)
-        
-        y_start = int(h * 0.80)
-        
-        for i, linea in enumerate(lineas):
-            # Calcular tamaño de texto
-            bbox = draw.textbbox((0, 0), linea, font=font)
-            text_w = bbox[2] - bbox[0]
-            text_h = bbox[3] - bbox[1]
-            
-            x = (w - text_w) // 2
-            y = y_start + (i * (text_h + 10))
-            
-            # Dibujar borde negro
-            grosor = max(2, int(font_size * 0.05))
-            for dx in range(-grosor, grosor+1):
-                for dy in range(-grosor, grosor+1):
-                    draw.text((x+dx, y+dy), linea, font=font, fill=(0,0,0))
-                    
-            # Dibujar texto blanco
-            draw.text((x, y), linea, font=font, fill=(255,255,255))
-            
-        img.save(output_path, "JPEG", quality=90)
+    def _generar_srt(self, imagenes: list, dur_escena: float) -> str:
+        """SRT con timing proporcional a caracteres — sincronizado con el audio"""
+        lines = []
+        idx = 1
+        chars_por_linea = 36
+
+        for i, (_, texto) in enumerate(imagenes):
+            texto = (texto or "").strip()
+            if not texto: continue
+            scene_start = i * dur_escena
+
+            # Trocear en líneas de max 36 chars
+            words = texto.split()
+            chunks, cur, cur_len = [], [], 0
+            for word in words:
+                if cur_len + len(word) + 1 > chars_por_linea and cur:
+                    chunks.append(" ".join(cur)); cur, cur_len = [word], len(word)
+                else:
+                    cur.append(word); cur_len += len(word) + 1
+            if cur: chunks.append(" ".join(cur))
+            if not chunks: continue
+
+            total_chars = sum(len(c) for c in chunks) or 1
+            t = scene_start
+            for chunk in chunks:
+                dur_chunk = max(1.2, min(3.5, dur_escena * len(chunk) / total_chars))
+                t_end = min(t + dur_chunk - 0.1, scene_start + dur_escena - 0.05)
+                lines += [str(idx), f"{self._fmt_srt(t)} --> {self._fmt_srt(t_end)}", chunk, ""]
+                idx += 1; t += dur_chunk
+
+        return "\n".join(lines)
+
+    def _fmt_srt(self, s: float) -> str:
+        s = max(0.0, s)
+        h = int(s // 3600); m = int((s % 3600) // 60)
+        sec = int(s % 60); ms = int(round((s - int(s)) * 1000))
+        return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
+
+
 
     async def _verificar_ffmpeg(self) -> Optional[str]:
         try:
