@@ -766,66 +766,70 @@ Responde SOLO JSON:
         gc.collect()
 
     async def _generar_imagen_pollinations(self, query: str, ruta_salida: str, width: int = 2560, height: int = 1440) -> bool:
-        """Generar imagen usando Pollinations.ai con reintentos y sanitización"""
+        """
+        Cadena de fuentes de imágenes (orden: velocidad + confiabilidad):
+        1. Pexels API (si hay key) — rápida y confiable
+        2. Pollinations.ai — IA gratis, timeout ajustado
+        3. Picsum Photos — siempre disponible, sin API key
+        """
         import httpx
         import urllib.parse
         import random
 
-        # Sanitizar query: Limitar longitud y caracteres especiales
-        query_limpio = query[:250].replace("\n", " ").replace('"', "").strip()
-        query_codificado = urllib.parse.quote(query_limpio)
-        
-        # MEJORAS: Mayor resolución y mejor calidad
-        resolution = f"{width}x{height}"
-        
-        # Seeds múltiples para variedad + mejores prompts
-        seed = random.randint(1, 99999)
-        
-        # URL con opciones de máxima calidad:
-        # - width/height: resolución
-        # - nologo: sin logo de Watermark
-        # - seed: para reproducibilidad
-        # - enhance: mejora el prompt internamente
-        # - private: no publicly visible
-        url = f"https://image.pollinations.ai/prompt/{query_codificado}?width={width}&height={height}&nologo=true&seed={seed}&enhance=true&private=true&model=flux"
-        
-        print(f"[POLLINATIONS] Generando en {resolution} - {query_limpio[:50]}...")
-        
-        intentos = 3
-        for i in range(intentos):
-            try:
-                print(f"[POLLINATIONS] Intento {i+1}/3...")
-                async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-                    response = await client.get(url)
-                    
-                    if response.status_code == 200 and len(response.content) > 20000:
-                        with open(ruta_salida, "wb") as f:
-                            f.write(response.content)
-                        size_kb = len(response.content) / 1024
-                        print(f"[POLLINATIONS] ✅ Éxito: {size_kb:.0f} KB ({width}x{height})")
-                        return True
-                    
-                    print(f"[POLLINATIONS] ⚠️ Respuesta inválida ({response.status_code}), reintentando...")
-            except Exception as e:
-                print(f"[POLLINATIONS] ❌ Error intento {i+1}: {e}")
-            
-            if i < intentos - 1:
-                await asyncio.sleep(2 * (i + 1)) # Espera incremental
+        query_limpio = query[:200].replace("\n", " ").replace('"', "").strip()
 
-        # Fallback to Unsplash (lightweight free images)
-        print("[UNSPLASH] Intentando fallback con Unsplash Source")
-        success = await self._generar_imagen_unsplash(query_limpio, ruta_salida, use_source=True)
-        if success:
-            print("[UNSPLASH] ✅ Imagen obtenida de Unsplash Source")
-            return True
-        # If API key is provided, try official Unsplash API
-        if UNSPLASH_ACCESS_KEY:
-            print("[UNSPLASH] Intentando fallback con API oficial")
-            success = await self._generar_imagen_unsplash(query_limpio, ruta_salida)
-            if success:
-                print("[UNSPLASH] ✅ Imagen obtenida de Unsplash API")
-                return True
+        # ── FUENTE 1: Pexels (la más rápida si hay key) ──────────────
+        if PEXELS_API_KEY:
+            try:
+                print(f"[IMAGENES] Pexels: {query_limpio[:50]}...")
+                ok = await self._buscar_imagen_pexels(query_limpio, ruta_salida)
+                if ok:
+                    print("[IMAGENES] Pexels OK")
+                    return True
+            except Exception as e:
+                print(f"[IMAGENES] Pexels error: {e}")
+
+        # ── FUENTE 2: Pollinations.ai — resolución reducida para velocidad ──
+        # Usamos 1280x720 para generar (se escala después en FFmpeg)
+        gen_w, gen_h = 1280, 720
+        seed = random.randint(1, 99999)
+        query_cod = urllib.parse.quote(query_limpio[:150])
+        url_poll = (
+            f"https://image.pollinations.ai/prompt/{query_cod}"
+            f"?width={gen_w}&height={gen_h}&nologo=true&seed={seed}&model=flux"
+        )
+        try:
+            print(f"[IMAGENES] Pollinations 720p: {query_limpio[:50]}...")
+            async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as hc:
+                resp = await hc.get(url_poll)
+                if resp.status_code == 200 and len(resp.content) > 15000:
+                    with open(ruta_salida, "wb") as f:
+                        f.write(resp.content)
+                    print(f"[IMAGENES] Pollinations OK ({len(resp.content)//1024} KB)")
+                    return True
+                print(f"[IMAGENES] Pollinations status {resp.status_code}, pasando a Picsum...")
+        except Exception as e:
+            print(f"[IMAGENES] Pollinations timeout/error: {e} — pasando a Picsum...")
+
+        # ── FUENTE 3: Picsum Photos (always-on, sin API key) ──────────
+        try:
+            print("[IMAGENES] Picsum Photos fallback...")
+            picsum_seed = (hash(query_limpio) % 1000) + 1
+            url_picsum = f"https://picsum.photos/seed/{picsum_seed}/1280/720"
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as hc:
+                resp = await hc.get(url_picsum)
+                if resp.status_code == 200 and len(resp.content) > 10000:
+                    with open(ruta_salida, "wb") as f:
+                        f.write(resp.content)
+                    print(f"[IMAGENES] Picsum OK ({len(resp.content)//1024} KB)")
+                    return True
+        except Exception as e:
+            print(f"[IMAGENES] Picsum error: {e}")
+
+        print("[IMAGENES] Todas las fuentes fallaron — usando placeholder")
         return False
+
+
 
     async def _buscar_imagen_pexels(self, query: str, ruta_salida: str) -> bool:
         """Buscar imagen en Pexels API (requiere API key)"""
