@@ -860,79 +860,43 @@ Responde SOLO JSON:
 
     async def _generar_imagen_placeholder(self, ruta_salida: str, descripcion: str,
                                            indice: int = 0, total: int = 1, query: str = ""):
-        """Generar placeholder CINEMATOGRÁFICO VISIBLE (colores brillantes)"""
+        """Generar placeholder CINEMATOGRÁFICO rápido (gradiente por líneas, no pixel-a-pixel)"""
         try:
-            from PIL import Image, ImageDraw, ImageFont, ImageFilter
+            from PIL import Image, ImageDraw, ImageFont
             import random
-            random.seed(indice + total)  # Reproducible por escena
+            random.seed(indice + total)
 
             width, height = 1920, 1080
             img = Image.new('RGB', (width, height))
             draw = ImageDraw.Draw(img)
 
-            # Paletas cinematográficas BRILLANTES
+            # Paletas cinematográficas
             paletas = [
-                # Aurora Boreal
-                ((10, 60, 120), (0, 180, 160), (120, 40, 180)),
-                # Atardecer épico
-                ((200, 80, 30), (255, 160, 50), (80, 20, 80)),
-                # Océano profundo
-                ((0, 80, 160), (0, 180, 220), (0, 40, 100)),
-                # Bosque mágico
-                ((20, 80, 40), (60, 180, 80), (180, 140, 40)),
-                # Galaxia
-                ((40, 10, 80), (100, 30, 150), (180, 60, 120)),
-                # Fuego dramático
-                ((180, 30, 10), (255, 120, 20), (80, 10, 40)),
+                ((10, 60, 120), (0, 180, 160)),   # Aurora Boreal
+                ((200, 80, 30), (255, 160, 50)),   # Atardecer épico
+                ((0, 80, 160), (0, 180, 220)),     # Océano profundo
+                ((20, 80, 40), (60, 180, 80)),     # Bosque mágico
+                ((40, 10, 80), (100, 30, 150)),    # Galaxia
+                ((180, 30, 10), (255, 120, 20)),   # Fuego dramático
             ]
+            c1, c2 = paletas[indice % len(paletas)]
 
-            idx = indice % len(paletas)
-            colores = paletas[idx]
-
-            # Gradiente multi-color con ondas
+            # Gradiente eficiente: 1 línea horizontal por iteración (no pixel a pixel)
             for y in range(height):
-                for x in range(width):
-                    # Posición normalizada
-                    px = x / width
-                    py = y / height
+                t = y / height
+                r = int(c1[0] * (1 - t) + c2[0] * t)
+                g = int(c1[1] * (1 - t) + c2[1] * t)
+                b = int(c1[2] * (1 - t) + c2[2] * t)
+                draw.line([(0, y), (width, y)], fill=(r, g, b))
 
-                    # Mezcla de colores con ondas
-                    onda1 = 0.5 + 0.5 * __import__('math').sin(px * 3.14159 * 4 + indice)
-                    onda2 = 0.5 + 0.5 * __import__('math').cos(py * 3.14159 * 3 + indice * 2)
+            # Viñeta simple con rectángulos transparentes (rápido)
+            overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+            ov_draw = ImageDraw.Draw(overlay)
+            ov_draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 60))
+            img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+            draw = ImageDraw.Draw(img)
 
-                    t1 = onda1
-                    t2 = onda2 * (1 - t1)
-
-                    r = int(colores[0][0] * (1 - t1 - t2) + colores[1][0] * t1 + colores[2][0] * t2)
-                    g = int(colores[0][1] * (1 - t1 - t2) + colores[1][1] * t1 + colores[2][1] * t2)
-                    b = int(colores[0][2] * (1 - t1 - t2) + colores[1][2] * t1 + colores[2][2] * t2)
-
-                    # Asegurar rango válido
-                    r = max(0, min(255, r))
-                    g = max(0, min(255, g))
-                    b = max(0, min(255, b))
-
-                    img.putpixel((x, y), (r, g, b))
-
-            # Efecto de luz/viñeta cinematográfica
-            # Viñeta oscura en bordes
-            for y in range(height):
-                for x in range(width):
-                    cx = (x / width - 0.5) * 2
-                    cy = (y / height - 0.5) * 2
-                    dist = __import__('math').sqrt(cx * cx + cy * cy)
-                    vignette = max(0, 1 - dist * 0.7)
-
-                    r, g, b = img.getpixel((x, y))
-                    r = int(r * vignette)
-                    g = int(g * vignette)
-                    b = int(b * vignette)
-                    img.putpixel((x, y), (r, g, b))
-
-            # Desenfoque sutil para efecto cinematográfico
-            img = img.filter(ImageFilter.GaussianBlur(radius=2))
-
-            # Agregar texto
+            # Texto
             try:
                 font = ImageFont.truetype("arial.ttf", 48)
                 font_small = ImageFont.truetype("arial.ttf", 28)
@@ -943,34 +907,21 @@ Responde SOLO JSON:
             text = f"Escena {indice + 1}"
             bbox = draw.textbbox((0, 0), text, font=font)
             text_w = bbox[2] - bbox[0]
-
-            # Fondo semi-transparente
-            overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
-            overlay_draw = ImageDraw.Draw(overlay)
-            overlay_draw.rounded_rectangle(
-                [(width//2 - 250, height//2 - 60), (width//2 + 250, height//2 + 100)],
-                radius=20, fill=(0, 0, 0, 150)
-            )
-            img.paste(Image.alpha_composite(Image.new('RGBA', img.size, (0,0,0)), overlay).convert('RGB'))
-
-            draw = ImageDraw.Draw(img)
             draw.text(((width - text_w) // 2, height // 2 - 40), text, fill="white", font=font)
 
             desc = descripcion[:70] + "..." if len(descripcion) > 70 else descripcion
-            if query:
-                desc += f"\n[{query}]"
             bbox2 = draw.textbbox((0, 0), desc, font=font_small)
             desc_w = bbox2[2] - bbox2[0]
             draw.text(((width - desc_w) // 2, height // 2 + 20), desc, fill=(220, 220, 220), font=font_small)
 
-            # Guardar como JPEG mejor calidad
             if ruta_salida.endswith('.png'):
                 ruta_salida = ruta_salida[:-4] + '.jpg'
-            img.save(ruta_salida, "JPEG", quality=92)
+            img.save(ruta_salida, "JPEG", quality=88)
 
         except Exception as e:
             print(f"[PLACEHOLDER] Error: {e}")
             self._crear_imagen_simple(ruta_salida, indice)
+
 
     async def _generar_imagen_unsplash(self, query: str, ruta_salida: str, use_source: bool = False) -> bool:
         """Obtener una imagen libre de Unsplash.
@@ -1126,18 +1077,22 @@ Responde SOLO JSON:
     def _run_ffmpeg(self, cmd: list) -> tuple:
         """Ejecutar FFmpeg con subprocess.run y retornar (success, stderr)"""
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
+            kwargs = {
+                "capture_output": True,
+                "text": True,
+                "timeout": 300,
+            }
+            # CREATE_NO_WINDOW es exclusivo de Windows; en Linux/Render falla
+            if os.name == "nt":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+            result = subprocess.run(cmd, **kwargs)
             return result.returncode == 0, result.stderr
         except subprocess.TimeoutExpired:
             return False, "Timeout FFmpeg"
         except Exception as e:
             return False, str(e)
+
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
                                 audio_path: Optional[str], escenas: list) -> Optional[str]:
