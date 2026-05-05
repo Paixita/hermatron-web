@@ -336,9 +336,11 @@ async function crearVideoDesdeStudio() {
     progresoFill.style.background = '#007BFF';
 
     try {
-        console.log("Enviando solicitud de creación completa al servidor...");
+        console.log("Iniciando Pre-Producción (Storyboard)...");
         const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
-        const response = await fetch('/api/video/crear', {
+        
+        // Usamos el endpoint de pre-producción para generar imágenes primero
+        const response = await fetch('/api/video/pre-produccion', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -357,84 +359,53 @@ async function crearVideoDesdeStudio() {
         }
 
         const data = await response.json();
-        console.log("Video creado:", data);
         proyectoActual = data.video_id;
 
-        // Polling loop para checar el progreso
+        // Loop de progreso para la fase de IMÁGENES
         pollingInterval = setInterval(async () => {
             try {
                 const progRes = await fetch(`/api/video/progreso/${proyectoActual}`);
-                if (!progRes.ok) return; // Ignorar errores de red temporales
+                if (!progRes.ok) return;
                 const progData = await progRes.json();
                 
                 let pct = progData.progreso || 10;
                 progresoFill.style.width = pct + '%';
                 progresoPorcentaje.textContent = pct + '%';
 
+                // Fases estilo CapCut
                 if (progData.estado === 'en_cola') {
-                    progresoFill.style.background = '#6c757d';
-                    progresoEstado.innerHTML = `⏳ <strong>En cola...</strong> Esperando a que el servidor se libere.`;
-                } else if (pct < 20) {
-                    progresoEstado.innerHTML = `🧠 Analizando y diseñando guion...`;
-                } else if (pct < 50) {
+                    progresoEstado.innerHTML = `⏳ <strong>En cola...</strong> Esperando servidor.`;
+                } else if (pct < 30) {
+                    progresoEstado.innerHTML = `🧠 Analizando tema y diseñando escenas...`;
+                } else if (progData.estado === 'generando_imagenes' || (pct >= 30 && pct < 85)) {
                     progresoFill.style.background = '#6f42c1';
-                    progresoEstado.innerHTML = `📸 Creando imágenes multimedia...`;
-                } else if (pct < 70) {
-                    progresoFill.style.background = '#fd7e14';
-                    progresoEstado.innerHTML = `🎙️ Creando voz superpuesta y sincronizando diálogo...`;
-                } else if (pct < 90) {
-                    progresoFill.style.background = '#17a2b8';
-                    progresoEstado.innerHTML = `📝 Generando subtítulos...`;
-                } else {
-                    progresoFill.style.background = '#28a745';
-                    progresoEstado.innerHTML = `🎬 Renderizando video final...`;
+                    progresoEstado.innerHTML = `📸 <strong>Creando imágenes multimedia...</strong>`;
                 }
 
-                if (progData.estado === 'completado') {
+                // Cuando termina de crear imágenes, mostramos el STORYBOARD
+                if (progData.estado === 'listo_para_revision' || pct >= 85) {
                     clearInterval(pollingInterval);
-                    progresoFill.style.width = '100%';
-                    progresoFill.style.background = '#2ea043';
-                    progresoPorcentaje.textContent = '100%';
-                    progresoEstado.innerHTML = `✅ <strong>¡Video generado con éxito!</strong>`;
-                    showToast('🎉 Video Listo', 'success');
-
-                    await cargarVideoPreview(proyectoActual);
-                    await renderStoryboard(proyectoActual);
-                    await cargarGaleriaProyectos();
-
-                    btnCrear.disabled = false;
-                    btnCrear.textContent = '🎬 Crear Video Profesional';
-
-                    setTimeout(() => {
-                        progresoDiv.style.display = 'none';
-                        progresoFill.style.background = '';
-                    }, 3000);
-                } else if (progData.estado === 'completado') {
-                    clearInterval(pollingInterval);
-                    progresoFill.style.width = '100%';
-                    progresoFill.style.background = '#2ea043';
-                    progresoPorcentaje.textContent = '100%';
-                    progresoEstado.innerHTML = `✅ <strong>¡Video completado exitosamente!</strong>`;
-                    showToast('🎉 ¡Video completado!', 'success');
-
-                    await cargarVideoPreview(proyectoActual);
-                    await cargarGaleriaProyectos();
+                    pollingInterval = null;
                     
-                    const listCreaciones = document.getElementById('galleryListCreaciones');
-                    if (listCreaciones) listCreaciones.classList.remove('collapsed');
-                    const headerCreaciones = listCreaciones.previousElementSibling;
-                    if (headerCreaciones) headerCreaciones.classList.remove('collapsed-header');
-
-                    btnCrear.disabled = false;
-                    btnCrear.textContent = '🎬 Crear Video Profesional';
-
+                    progresoFill.style.width = '100%';
+                    progresoFill.style.background = '#28a745';
+                    progresoPorcentaje.textContent = '100%';
+                    progresoEstado.innerHTML = `✅ ¡Imágenes listas! Revisa tu storyboard.`;
+                    
+                    showToast('🎞️ Storyboard Generado', 'success');
+                    
+                    // Ocultar carga y mostrar Editor
                     setTimeout(() => {
                         progresoDiv.style.display = 'none';
-                        progresoFill.style.background = '';
-                    }, 5000);
+                        document.getElementById('previewPlaceholder').style.display = 'none';
+                        renderStoryboard(proyectoActual);
+                    }, 1500);
+                    
+                    btnCrear.disabled = false;
+                    btnCrear.textContent = '🎬 Crear Video Profesional';
                 } else if (progData.estado === 'error' || progData.error) {
                     clearInterval(pollingInterval);
-                    throw new Error(progData.error || 'Error desconocido en el servidor');
+                    throw new Error(progData.error || 'Error en el servidor');
                 }
 
             } catch (err) {
@@ -865,9 +836,12 @@ async function renderStoryboard(proyectoId) {
     const container = document.getElementById('storyboardContainer');
     const grid = document.getElementById('storyboardGrid');
     
-    // Ocultar botón de ensamblar manual porque ahora es automático
+    // El botón de renderizar ahora es visible para pasar a la fase final
     const btnEnsamblar = container.querySelector('.btn-success');
-    if (btnEnsamblar) btnEnsamblar.style.display = 'none';
+    if (btnEnsamblar) {
+        btnEnsamblar.style.display = 'block';
+        btnEnsamblar.textContent = '🎬 Renderizar Video Final';
+    }
 
     container.style.display = 'block';
     grid.innerHTML = '<div class="spinner"></div> Cargando escenas...';
@@ -879,28 +853,58 @@ async function renderStoryboard(proyectoId) {
         grid.innerHTML = '';
         const escenas = data.escenas_disenadas || [];
         
+        // Detectar ratio para la previsualización de la tarjeta
+        const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
+        const ratioClass = ratio === '9:16' ? 'story-vertical' : 'story-horizontal';
+
         escenas.forEach(escena => {
-            // Extraer solo la ruta relativa de la carpeta videos
             let relPath = escena.imagen_path ? escena.imagen_path.split('videos')[1] : null;
             if (relPath) relPath = relPath.replace(/\\/g, '/');
             const imgUrl = relPath ? '/video_files' + relPath : '';
 
             const card = document.createElement('div');
-            card.className = 'storyboard-card';
-            card.style.cssText = 'background: #1e1e24; border-radius: 8px; padding: 10px; border: 1px solid #333; display: flex; flex-direction: column; gap: 10px; position: relative; min-width: 250px;';
+            card.className = `storyboard-card ${ratioClass}`;
+            card.style.cssText = `
+                background: #1e1e24; 
+                border-radius: 12px; 
+                padding: 15px; 
+                border: 1px solid #333; 
+                display: flex; 
+                flex-direction: column; 
+                gap: 12px; 
+                position: relative; 
+                min-width: ${ratio === '9:16' ? '200px' : '320px'};
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            `;
+            
             card.innerHTML = `
-                <div style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 4px; overflow: hidden;">
+                <div style="position: relative; width: 100%; aspect-ratio: ${ratio.replace(':','/')}; background: #000; border-radius: 8px; overflow: hidden; border: 2px solid #444;">
                     <img id="img-escena-${escena.numero}" src="${imgUrl}" style="width: 100%; height: 100%; object-fit: cover;">
-                    <div id="overlay-escena-${escena.numero}" style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center;">
+                    <div id="overlay-escena-${escena.numero}" style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display:none; flex-direction:column; align-items:center; justify-content:center; z-index: 10;">
                         <div class="spinner-small"></div>
+                        <span style="font-size: 0.7rem; color: #fff; margin-top: 10px;">Creando...</span>
+                    </div>
+                    <!-- Previsualización de Subtítulo -->
+                    <div style="position: absolute; bottom: 10%; left: 0; width: 100%; text-align: center; pointer-events: none;">
+                        <span style="background: rgba(0,0,0,0.6); color: #fff; font-size: 0.7rem; padding: 2px 6px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.2);">
+                            ${escena.texto_narracion || 'Subtítulo aquí'}
+                        </span>
                     </div>
                 </div>
                 <div>
-                    <h4 style="margin:0; font-size: 0.9rem; color: #fff;">Escena ${escena.numero}</h4>
-                    <p style="font-size: 0.8rem; color: #aaa; margin: 5px 0;">${escena.texto_narracion || ''}</p>
+                    <h4 style="margin:0; font-size: 0.9rem; color: var(--primary-color);">🎬 Escena ${escena.numero}</h4>
+                    <p style="font-size: 0.75rem; color: #aaa; margin: 5px 0; font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                        "${escena.texto_narracion || ''}"
+                    </p>
                 </div>
-                <textarea id="prompt-escena-${escena.numero}" style="font-size: 0.8rem; background: #111; color: #ddd; border: 1px solid #444; border-radius: 4px; padding: 5px; min-height: 60px;">${escena.descripcion_visual || ''}</textarea>
-                <button class="btn btn-secondary btn-sm" onclick="regenerarImagen('${proyectoId}', ${escena.numero})">🔄 Regenerar Imagen</button>
+                <div class="edit-prompt-box">
+                    <label style="font-size: 0.65rem; color: #777; text-transform: uppercase; font-weight: 700;">Prompt Visual:</label>
+                    <textarea id="prompt-escena-${escena.numero}" style="width: 100%; font-size: 0.75rem; background: #111; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 8px; min-height: 50px; margin-top: 4px; font-family: Inter, sans-serif;">${escena.descripcion_visual || ''}</textarea>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-sm" style="flex:1; font-size: 0.7rem;" onclick="regenerarImagen('${proyectoId}', ${escena.numero})">🔄 Ver más (AI)</button>
+                    <button class="btn btn-nav btn-sm" style="padding: 5px;" title="Ver grande" onclick="window.open('${imgUrl}', '_blank')">🔍</button>
+                </div>
             `;
             grid.appendChild(card);
         });
@@ -933,16 +937,13 @@ async function regenerarImagen(proyectoId, escenaNum) {
             let relPath = data.imagen_path.split('videos')[1];
             if (relPath) relPath = relPath.replace(/\\/g, '/');
             imgEl.src = '/video_files' + relPath + '?t=' + new Date().getTime();
-            showToast('✅ Imagen regenerada con éxito', 'success');
-            
-            // Re-ensamblar video automáticamente
-            ensamblarVideoFinal();
+            showToast('✅ Imagen actualizada', 'success');
         } else {
-            showToast('❌ Error al regenerar la imagen', 'error');
+            showToast('❌ Error al generar nueva imagen', 'error');
         }
     } catch (e) {
         console.error(e);
-        showToast('❌ Error de conexión', 'error');
+        showToast('❌ Error de red', 'error');
     } finally {
         if (overlay) overlay.style.display = 'none';
     }
@@ -951,6 +952,10 @@ async function regenerarImagen(proyectoId, escenaNum) {
 async function ensamblarVideoFinal() {
     if (!proyectoActual) return;
     
+    const res = document.getElementById('exportResolution').value;
+    showToast(`🎬 Renderizando video en ${res}p...`, 'info');
+    
+    // Ocultar Storyboard y mostrar progreso final
     document.getElementById('storyboardContainer').style.display = 'none';
     
     const progresoDiv = document.getElementById('studioProgreso');
@@ -959,42 +964,54 @@ async function ensamblarVideoFinal() {
     const progresoEstado = document.getElementById('progresoEstado');
     
     progresoDiv.style.display = 'block';
-    progresoFill.style.width = '80%';
-    progresoPorcentaje.textContent = '80%';
+    progresoFill.style.width = '10%';
+    progresoPorcentaje.textContent = '10%';
     progresoFill.style.background = '#fd7e14';
-    progresoEstado.innerHTML = '🎙️ Generando Voz y Ensamblando el Video Final...';
+    progresoEstado.innerHTML = '🎙️ <strong>Creando la voz superpuesta...</strong>';
     
     try {
         await fetch('/api/video/ensamblar', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ proyecto_id: proyectoActual })
+            body: JSON.stringify({ 
+                proyecto_id: proyectoActual,
+                resolucion: res 
+            })
         });
         
-        // Retomar el polling
         if (pollingInterval) clearInterval(pollingInterval);
+        
         pollingInterval = setInterval(async () => {
             try {
                 const progRes = await fetch('/api/video/progreso/' + proyectoActual);
                 if (!progRes.ok) return;
                 const progData = await progRes.json();
                 
-                let pct = progData.progreso || 80;
+                let pct = progData.progreso || 10;
                 progresoFill.style.width = pct + '%';
                 progresoPorcentaje.textContent = pct + '%';
                 
-                if (pct >= 90) {
+                // Mensajes de fase final CapCut Style
+                if (pct < 40) {
+                    progresoEstado.innerHTML = '🎙️ <strong>Creando la voz superpuesta...</strong>';
+                    progresoFill.style.background = '#fd7e14';
+                } else if (pct < 70) {
+                    progresoEstado.innerHTML = '📝 <strong>Creando subtítulos...</strong>';
                     progresoFill.style.background = '#17a2b8';
-                    progresoEstado.innerHTML = '🎬 Combinando Imágenes, Audio y Subtítulos...';
+                } else if (pct < 95) {
+                    progresoEstado.innerHTML = '🎞️ <strong>Creando el video...</strong>';
+                    progresoFill.style.background = '#2ea043';
                 }
                 
                 if (progData.estado === 'completado') {
                     clearInterval(pollingInterval);
+                    pollingInterval = null;
+                    
                     progresoFill.style.width = '100%';
                     progresoFill.style.background = '#2ea043';
                     progresoPorcentaje.textContent = '100%';
-                    progresoEstado.innerHTML = '✅ <strong>¡Video finalizado!</strong>';
-                    showToast('🎉 ¡Video Completado!', 'success');
+                    progresoEstado.innerHTML = '✅ ¡Video Finalizado!';
+                    showToast('🎉 ¡Tu video está listo!', 'success');
 
                     await cargarVideoPreview(proyectoActual);
                     await cargarGaleriaProyectos();
@@ -1002,11 +1019,12 @@ async function ensamblarVideoFinal() {
                     setTimeout(() => {
                         progresoDiv.style.display = 'none';
                         progresoFill.style.background = '';
-                    }, 5000);
+                    }, 3000);
                 } else if (progData.estado === 'error') {
                     clearInterval(pollingInterval);
-                    const errorMsg = progData.error || 'Falló al ensamblar.';
-                    progresoEstado.innerHTML = '❌ <strong>Error:</strong> ' + errorMsg;
+                    pollingInterval = null;
+                    showToast('❌ Error en el renderizado final', 'error');
+                    progresoEstado.innerHTML = '❌ <strong>Error:</strong> ' + (progData.error || 'Fallo');
                     progresoFill.style.background = '#da3633';
                 }
             } catch (err) {
@@ -1016,6 +1034,6 @@ async function ensamblarVideoFinal() {
         
     } catch (e) {
         console.error(e);
-        showToast('❌ Error iniciando ensamblaje', 'error');
+        showToast('❌ Error al iniciar ensamble', 'error');
     }
 }

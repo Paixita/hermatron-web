@@ -554,7 +554,7 @@ Responde SOLO JSON:
                 return e.get("imagen_path")
         return ""
 
-    async def ensamblar_video_final(self, proyecto_id: str, generar_voz_func=None) -> str:
+    async def ensamblar_video_final(self, proyecto_id: str, generar_voz_func=None, resolucion: str = "1080") -> str:
         """
         Fases 6-7: Una vez el Storyboard está aprobado por el usuario, genera voz y ensambla.
         """
@@ -591,7 +591,7 @@ Responde SOLO JSON:
         self._actualizar_progreso(proyecto_id, 95)
 
         video_final = await self._ensamblar_video(
-            proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas
+            proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion
         )
         self._actualizar_progreso(proyecto_id, 100)
 
@@ -1099,7 +1099,7 @@ Responde SOLO JSON:
 
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
-                                audio_path: Optional[str], escenas: list) -> Optional[str]:
+                                audio_path: Optional[str], escenas: list, resolucion: str = "1080") -> Optional[str]:
         """Ensamblar video con Ken Burns zoom + subtítulos sincronizados (FFmpeg nativo)"""
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
 
@@ -1117,7 +1117,7 @@ Responde SOLO JSON:
             print("[VIDEO] Sin imágenes")
             return None
 
-        print(f"[VIDEO] Ensamblando {len(imagenes)} escenas con zoom + SRT...")
+        print(f"[VIDEO] Ensamblando {len(imagenes)} escenas con zoom + SRT a {resolucion}p...")
 
         try:
             import PIL.Image
@@ -1130,15 +1130,22 @@ Responde SOLO JSON:
             
             dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
             
-            # Detectar resolución base y escalar a 720p máximo para ahorrar RAM
-            w, h = 1280, 720
+            # Mapa de resoluciones
+            res_map = {
+                "720": (1280, 720),
+                "1080": (1920, 1080),
+                "1920": (2560, 1440), # 2K
+                "2160": (3840, 2160)  # 4K
+            }
+            base_w, base_h = res_map.get(resolucion, (1280, 720))
+            
+            # Detectar si es vertical
+            w, h = base_w, base_h
             try:
                 with PIL.Image.open(imagenes[0][0]) as first_img:
                     orig_w, orig_h = first_img.size
-                    if orig_w > orig_h: # Horizontal 16:9
-                        w, h = 1280, 720
-                    else: # Vertical 9:16
-                        w, h = 720, 1280
+                    if orig_h > orig_w: # Vertical 9:16
+                        w, h = base_h, base_w
             except Exception:
                 pass
 

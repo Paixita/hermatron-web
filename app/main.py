@@ -1036,9 +1036,9 @@ async def _proceso_pre_produccion(proyecto_id: str, tema: str, prompt: str, voz:
         print(f"Error en pre-produccion background: {e}")
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
 
-async def _proceso_ensamblar(proyecto_id: str):
+async def _proceso_ensamblar(proyecto_id: str, resolucion: str = "1080"):
     try:
-        await generador_video.ensamblar_video_final(proyecto_id=proyecto_id, generar_voz_func=None)
+        await generador_video.ensamblar_video_final(proyecto_id=proyecto_id, generar_voz_func=None, resolucion=resolucion)
     except Exception as e:
         print(f"Error en ensamblaje background: {e}")
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
@@ -1074,11 +1074,49 @@ async def regenerar_imagen_endpoint(req: RegenerarImagenRequest):
 
 class EnsamblarRequest(BaseModel):
     proyecto_id: str
+    resolucion: Optional[str] = "1080"
 
 @app.post("/api/video/ensamblar")
 async def ensamblar_endpoint(req: EnsamblarRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(_proceso_ensamblar, req.proyecto_id)
+    # Pasamos la resolución seleccionada al ensamblador
+    background_tasks.add_task(_proceso_ensamblar, req.proyecto_id, req.resolucion)
     return {"success": True, "estado": "ensamblando"}
+
+class ExportarPCRequest(BaseModel):
+    proyecto_id: str
+    resolucion: Optional[str] = "1080"
+
+@app.post("/api/video/exportar-pc")
+async def exportar_pc_endpoint(req: ExportarPCRequest):
+    try:
+        proyecto = generador_video.obtener_proyecto(req.proyecto_id)
+        if not proyecto or not proyecto.get("archivo_final"):
+            return {"status": "error", "message": "Video no encontrado o no finalizado."}
+        
+        archivo_origen = generador_video.videos_dir / proyecto["archivo_final"]
+        if not archivo_origen.exists():
+            return {"status": "error", "message": "El archivo físico no existe."}
+            
+        # Intentar detectar el escritorio del usuario en Windows
+        try:
+            escritorio = Path(os.path.join(os.environ['USERPROFILE'], 'Desktop'))
+            if not escritorio.exists():
+                escritorio = Path(os.path.expanduser("~/Desktop"))
+        except:
+            escritorio = Path(os.path.expanduser("~/Desktop"))
+            
+        archivo_destino = escritorio / proyecto["archivo_final"]
+        
+        import shutil
+        shutil.copy2(archivo_origen, archivo_destino)
+        
+        # Opcional: Abrir la carpeta del escritorio
+        if os.name == 'nt':
+            os.startfile(escritorio)
+            
+        return {"status": "success", "ruta": str(archivo_destino)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/api/video/progreso/{video_id}")
 async def progreso_video(video_id: str):
