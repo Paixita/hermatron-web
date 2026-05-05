@@ -1159,7 +1159,14 @@ Responde SOLO JSON:
 
             for i, (img_path, _) in enumerate(imagenes):
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
-                zoom_expr = "min(zoom+0.0006,1.12)" if i % 2 == 0 else "max(1.12-0.0006*on,1.001)"
+                # Zoom más agresivo y dinámico (i%2 para alternar in/out)
+                if i % 2 == 0:
+                    # Zoom In suave: empieza en 1.0 y sube
+                    zoom_expr = "zoom+0.0012"
+                else:
+                    # Zoom Out: empieza en 1.15 y baja
+                    zoom_expr = "if(eq(on,1),1.15,zoom-0.0012)"
+                
                 vf_zoom = (
                     f"scale={sw}:{sh}:force_original_aspect_ratio=fill,"
                     f"crop={sw}:{sh},"
@@ -1210,7 +1217,8 @@ Responde SOLO JSON:
             srt_path.write_text(self._generar_srt(imagenes, dur_escena), encoding="utf-8")
 
             # ── PASO 4: audio + subtítulos ────────────────────────────
-            font_size = max(16, int(h * 0.025))   # 2.5% del alto → ~18px en 720p
+            # Tamaño profesional: ~3.5% del alto en horizontal, un poco menos en vertical
+            font_size = max(20, int(h * 0.038)) if h < w else max(24, int(h * 0.024))
             srt_esc = str(srt_path).replace("\\", "/")
             if os.name == "nt":
                 srt_esc = srt_esc.replace(":", "\\:")
@@ -1218,8 +1226,8 @@ Responde SOLO JSON:
             sub_style = (
                 f"FontName=Arial,FontSize={font_size},"
                 f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                f"BackColour=&H99000000,Outline=1,Shadow=0,"
-                f"BorderStyle=4,Alignment=2,MarginV=25"
+                f"BackColour=&H66000000,Outline=0.5,Shadow=0,"
+                f"BorderStyle=4,Alignment=2,MarginV=35"
             )
 
             cmd_final = ["ffmpeg", "-y", "-i", str(video_base)]

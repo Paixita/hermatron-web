@@ -782,8 +782,21 @@ function importarVideoLocalStudio(file) {
     document.getElementById('videoMetaTamano').textContent = `📦 ${(file.size / (1024 * 1024)).toFixed(2)} MB`;
     document.getElementById('videoMetaEscenas').textContent = `🎬 Reproductor Externo`;
 
-    // Mostrar botones de acción (aunque algunas como eliminar no aplicarán a archivos locales)
+    // Mostrar botones de acción
     actions.style.display = 'block';
+
+    // Botón para editar storyboard
+    const btnEditId = 'btnEditStoryboardFromPreview';
+    let btnEdit = document.getElementById(btnEditId);
+    if (!btnEdit) {
+        btnEdit = document.createElement('button');
+        btnEdit.id = btnEditId;
+        btnEdit.className = 'btn btn-secondary';
+        btnEdit.style.cssText = 'width: 100%; margin-top: 10px; background: #6f42c1; color: white; border: none; font-size: 0.8rem; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer;';
+        btnEdit.innerHTML = '🎨 Editar Escenas (Cambiar imágenes)';
+        actions.appendChild(btnEdit);
+    }
+    btnEdit.onclick = () => renderStoryboard(proyectoActual);
     
     showToast('🎬 ¡Video externo cargado en el estudio!', 'success');
 }
