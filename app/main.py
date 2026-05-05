@@ -522,11 +522,10 @@ async def video_studio(request: Request, current_user: dict = Depends(auth.get_c
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
-    # Selección de proveedor LLM: OpenRouter tiene prioridad si está configurado y activo
-    usar_openrouter = (LLM_PROVIDER == "openrouter" and openrouter_client is not None)
-    if not usar_openrouter and not client:
+    # Groq es el proveedor principal. OpenRouter entra como respaldo si Groq falla.
+    if not client and not openrouter_client:
         raise HTTPException(status_code=500, detail="Ningún proveedor LLM configurado (Groq/OpenRouter)")
-    print(f"[CHAT] proveedor={'OpenRouter' if usar_openrouter else 'Groq'} generar_audio={chat_request.generar_audio} calidad_audio={chat_request.calidad_audio} voz_id={chat_request.voz_id}")
+    print(f"[CHAT] generar_audio={chat_request.generar_audio} calidad_audio={chat_request.calidad_audio} voz_id={chat_request.voz_id}")
     
     if chat_request.conversacion_id != "default":
         conversaciones = await memoria.obtener_conversaciones()
@@ -547,23 +546,40 @@ async def chat(chat_request: ChatRequest):
             "content": "IMPORTANTE: NUNCA uses etiquetas como <function=...>. Si necesitas usar una herramienta, usa SOLO el formato JSON nativo de tool_calls que te provee la API."
         })
         
-        # ---- Llamada al LLM (Groq o OpenRouter) ----
-        if usar_openrouter:
-            completion_or = await openrouter_client.chat.completions.create(
-                messages=mensajes_groq,
-                model=OPENROUTER_MODEL,
-                temperature=0.2,
-                max_tokens=2048,
-            )
-            mensaje_respuesta = completion_or.choices[0].message
-        else:
-            chat_completion = client.chat.completions.create(
-                messages=mensajes_groq, model=GROQ_MODEL, temperature=0.2, max_tokens=2048,
-                tools=herramientas_groq, tool_choice="auto"
-            )
-            mensaje_respuesta = chat_completion.choices[0].message
+        # ---- Llamada al LLM: Groq primero, OpenRouter como respaldo ----
+        mensaje_respuesta = None
+        proveedor_usado = "ninguno"
 
-        
+        if client:
+            try:
+                chat_completion = client.chat.completions.create(
+                    messages=mensajes_groq, model=GROQ_MODEL, temperature=0.2, max_tokens=2048,
+                    tools=herramientas_groq, tool_choice="auto"
+                )
+                mensaje_respuesta = chat_completion.choices[0].message
+                proveedor_usado = "Groq"
+            except Exception as e_groq:
+                print(f"⚠️ [GROQ FALLÓ] {e_groq} — activando OpenRouter como respaldo...")
+
+        # Respaldo: OpenRouter si Groq no respondio o no está disponible
+        if mensaje_respuesta is None and openrouter_client:
+            try:
+                completion_or = await openrouter_client.chat.completions.create(
+                    messages=mensajes_groq,
+                    model=OPENROUTER_MODEL,
+                    temperature=0.2,
+                    max_tokens=2048,
+                )
+                mensaje_respuesta = completion_or.choices[0].message
+                proveedor_usado = f"OpenRouter({OPENROUTER_MODEL})"
+            except Exception as e_or:
+                print(f"❌ [OPENROUTER FALLÓ] {e_or}")
+
+        if mensaje_respuesta is None:
+            raise HTTPException(status_code=503, detail="Todos los proveedores LLM fallaron. Intenta de nuevo.")
+
+        print(f"🧠 [LLM] Respuesta generada por: {proveedor_usado}")
+
         if getattr(mensaje_respuesta, 'tool_calls', None):
             print("🧠 [CEREBRO AUTÓNOMO] Activando herramientas...")
             
@@ -600,14 +616,19 @@ async def chat(chat_request: ChatRequest):
                 
                 mensajes_groq.append({"role": "tool", "tool_call_id": tool_call.id, "name": nombre_funcion, "content": resultado_datos})
             
-            if usar_openrouter:
+            # Síntesis post-tool: Groq primero, OpenRouter como respaldo
+            respuesta = ""
+            if client:
+                try:
+                    chat_completion_final = client.chat.completions.create(messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048)
+                    respuesta = chat_completion_final.choices[0].message.content
+                except Exception as e_g:
+                    print(f"⚠️ [GROQ FALLÓ-TOOLS] {e_g} — usando OpenRouter...")
+            if not respuesta and openrouter_client:
                 comp_final = await openrouter_client.chat.completions.create(
                     messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
                 )
                 respuesta = comp_final.choices[0].message.content
-            else:
-                chat_completion_final = client.chat.completions.create(messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048)
-                respuesta = chat_completion_final.choices[0].message.content
         else:
             # Fallback: a veces el modelo devuelve un "tool call" en texto.
             # Si detectamos JSON tipo {"type":"function","name":"...","parameters":{...}},
@@ -638,16 +659,22 @@ async def chat(chat_request: ChatRequest):
 
                         mensajes_groq.append({"role": "assistant", "content": contenido})
                         mensajes_groq.append({"role": "user", "content": f"[SISTEMA] El resultado de la herramienta '{nombre}' fue:\n{json.dumps(tool_res)}\n\nUsa esta información para responder a mi pregunta anterior de forma natural."})
-                        if usar_openrouter:
+                        # Groq primero, OpenRouter como respaldo
+                        resp_fb = ""
+                        if client:
+                            try:
+                                chat_completion_final = client.chat.completions.create(
+                                    messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
+                                )
+                                resp_fb = chat_completion_final.choices[0].message.content
+                            except Exception as e_g:
+                                print(f"⚠️ [GROQ FALLÓ-FB] {e_g} — usando OpenRouter...")
+                        if not resp_fb and openrouter_client:
                             comp_fb = await openrouter_client.chat.completions.create(
                                 messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
                             )
-                            respuesta = comp_fb.choices[0].message.content
-                        else:
-                            chat_completion_final = client.chat.completions.create(
-                                messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
-                            )
-                            respuesta = chat_completion_final.choices[0].message.content
+                            resp_fb = comp_fb.choices[0].message.content
+                        respuesta = resp_fb
             except Exception as e:
                 print(f"❌ [TOOL-FALLBACK ERROR] {e}")
 
