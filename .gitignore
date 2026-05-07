@@ -35,9 +35,8 @@ wheels/
 *.sqlite3
 
 # Media files
-audio/*.mp3
-videos/*.mp4
-videos/*.webm
+videos/
+audio/
 imagenes_subidas/*
 
 # Sensitive text/code dumps

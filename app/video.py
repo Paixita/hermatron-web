@@ -89,6 +89,7 @@ class VideoProyecto:
     error: Optional[str] = None
     narracion: bool = True
     voz: str = "es-MX-JorgeNeural"
+    progreso: int = 0
 
 
 class GeneradorVideo:
@@ -139,10 +140,21 @@ class GeneradorVideo:
             self._guardar_proyecto(proyecto)
 
     def _actualizar_progreso(self, proyecto_id: str, progreso: int):
-        self._progreso[proyecto_id] = max(0, min(100, progreso))
+        progreso = max(0, min(100, progreso))
+        self._progreso[proyecto_id] = progreso
+        # Persistir en el JSON para que el proceso principal (API) lo vea
+        proyecto = self._cargar_proyecto(proyecto_id)
+        if proyecto:
+            proyecto.progreso = progreso
+            self._guardar_proyecto(proyecto)
 
     def obtener_progreso(self, proyecto_id: str) -> int:
-        return self._progreso.get(proyecto_id, 0)
+        # Intentar desde memoria primero (si estamos en el mismo proceso)
+        if proyecto_id in self._progreso:
+            return self._progreso[proyecto_id]
+        # Si no, leer del JSON
+        proyecto = self._cargar_proyecto(proyecto_id)
+        return proyecto.progreso if proyecto and hasattr(proyecto, 'progreso') else 0
 
     # ================================================================
     # FASE 1+2: ANALIZAR TEMA

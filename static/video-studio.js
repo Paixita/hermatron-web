@@ -336,17 +336,16 @@ async function crearVideoDesdeStudio() {
     progresoFill.style.background = '#007BFF';
 
     try {
-        console.log("Iniciando Pre-Producción (Storyboard)...");
+        console.log("Iniciando Pre-Producción (CapCut Flow)...");
         const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
         
-        // Usamos el endpoint de pre-producción para generar imágenes primero
+        // Fase 1: Enviar solicitud de pre-producción (solo genera guion e imágenes)
         const response = await fetch('/api/video/pre-produccion', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tema: tema,
                 prompt: prompt,
-                descripcion: prompt,
                 voz: voz,
                 estilo: estilo,
                 formato: ratio
@@ -361,7 +360,7 @@ async function crearVideoDesdeStudio() {
         const data = await response.json();
         proyectoActual = data.video_id;
 
-        // Loop de progreso para la fase de IMÁGENES
+        // Polling loop para checar las fases
         pollingInterval = setInterval(async () => {
             try {
                 const progRes = await fetch(`/api/video/progreso/${proyectoActual}`);
@@ -372,50 +371,36 @@ async function crearVideoDesdeStudio() {
                 progresoFill.style.width = pct + '%';
                 progresoPorcentaje.textContent = pct + '%';
 
-                // Fases estilo CapCut
-                if (progData.estado === 'en_cola') {
-                    progresoEstado.innerHTML = `⏳ <strong>En cola...</strong> Esperando servidor.`;
-                } else if (pct < 30) {
-                    progresoEstado.innerHTML = `🧠 Analizando tema y diseñando escenas...`;
-                } else if (progData.estado === 'generando_imagenes' || (pct >= 30 && pct < 85)) {
+                // Mensajes de fase estilo CapCut
+                if (progData.estado === 'generando_imagenes' || pct < 80) {
+                    progresoEstado.innerHTML = `📸 <strong>Fase 1:</strong> Creando imágenes multimedia...`;
                     progresoFill.style.background = '#6f42c1';
-                    progresoEstado.innerHTML = `📸 <strong>Creando imágenes multimedia...</strong>`;
-                }
-
-                // Cuando termina de crear imágenes, mostramos el STORYBOARD
-                if (progData.estado === 'listo_para_revision' || pct >= 85) {
+                } 
+                
+                // Si el servidor indica que las imágenes están listas para revisión
+                if (progData.estado === 'en_review' || progData.estado === 'listo_para_revision' || (pct >= 80 && progData.estado !== 'completado' && progData.estado !== 'generando_imagenes')) {
+                    console.log("¡Storyboard listo! Transicionando UI...");
                     clearInterval(pollingInterval);
                     pollingInterval = null;
                     
                     progresoFill.style.width = '100%';
-                    progresoFill.style.background = '#28a745';
-                    progresoPorcentaje.textContent = '100%';
-                    progresoEstado.innerHTML = `✅ ¡Imágenes listas! Revisa tu storyboard.`;
+                    progresoFill.style.background = '#2ea043';
+                    progresoEstado.innerHTML = `✅ ¡Imágenes listas! Entrando al Editor de Storyboard...`;
                     
-                    showToast('🎞️ Storyboard Generado', 'success');
-                    
-                    // Ocultar carga y mostrar Editor
                     setTimeout(() => {
                         progresoDiv.style.display = 'none';
-                        document.getElementById('previewPlaceholder').style.display = 'none';
-                        renderStoryboard(proyectoActual);
-                    }, 1500);
-                    
-                    btnCrear.disabled = false;
-                    btnCrear.textContent = '🎬 Crear Video Profesional';
-                } else if (progData.estado === 'error' || progData.error) {
-                    clearInterval(pollingInterval);
-                    throw new Error(progData.error || 'Error en el servidor');
+                        renderStoryboard(proyectoActual); // Abre el editor tipo CapCut
+                    }, 1000);
                 }
 
+                if (progData.estado === 'error') {
+                    clearInterval(pollingInterval);
+                    throw new Error(progData.error || 'Error en pre-producción');
+                }
             } catch (err) {
+                console.error(err);
                 clearInterval(pollingInterval);
-                console.error('Error polling:', err);
                 showToast(`❌ Error: ${err.message}`, 'error');
-                progresoEstado.innerHTML = `❌ <strong>Error:</strong> ${err.message}`;
-                progresoFill.style.background = '#da3633';
-                btnCrear.disabled = false;
-                btnCrear.textContent = '🎬 Crear Video Profesional';
             }
         }, 2000);
 
@@ -849,12 +834,17 @@ async function renderStoryboard(proyectoId) {
     const container = document.getElementById('storyboardContainer');
     const grid = document.getElementById('storyboardGrid');
     
-    // El botón de renderizar ahora es visible para pasar a la fase final
+    // Configurar botones de exportación
     const btnEnsamblar = container.querySelector('.btn-success');
     if (btnEnsamblar) {
         btnEnsamblar.style.display = 'block';
-        btnEnsamblar.textContent = '🎬 Renderizar Video Final';
+        btnEnsamblar.innerHTML = '🎬 Renderizar Video Final';
+        btnEnsamblar.onclick = ensamblarVideoFinal;
     }
+
+    // Asegurar que el progreso se oculte
+    const progresoDiv = document.getElementById('studioProgreso');
+    if (progresoDiv) progresoDiv.style.display = 'none';
 
     container.style.display = 'block';
     grid.innerHTML = '<div class="spinner"></div> Cargando escenas...';
@@ -865,10 +855,7 @@ async function renderStoryboard(proyectoId) {
         
         grid.innerHTML = '';
         const escenas = data.escenas_disenadas || [];
-        
-        // Detectar ratio para la previsualización de la tarjeta
-        const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
-        const ratioClass = ratio === '9:16' ? 'story-vertical' : 'story-horizontal';
+        const ratio = data.formato || '16:9';
 
         escenas.forEach(escena => {
             let relPath = escena.imagen_path ? escena.imagen_path.split('videos')[1] : null;
@@ -876,47 +863,48 @@ async function renderStoryboard(proyectoId) {
             const imgUrl = relPath ? '/video_files' + relPath : '';
 
             const card = document.createElement('div');
-            card.className = `storyboard-card ${ratioClass}`;
+            card.className = 'storyboard-card';
             card.style.cssText = `
-                background: #1e1e24; 
+                background: #1a1a1f; 
                 border-radius: 12px; 
                 padding: 15px; 
                 border: 1px solid #333; 
-                display: flex; 
-                flex-direction: column; 
-                gap: 12px; 
-                position: relative; 
-                min-width: ${ratio === '9:16' ? '200px' : '320px'};
-                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                display: grid; 
+                grid-template-columns: ${ratio === '16:9' ? '1.5fr 1fr' : '1fr 1.5fr'}; 
+                gap: 20px; 
+                margin-bottom: 20px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             `;
             
             card.innerHTML = `
-                <div style="position: relative; width: 100%; aspect-ratio: ${ratio.replace(':','/')}; background: #000; border-radius: 8px; overflow: hidden; border: 2px solid #444;">
+                <div style="position: relative; width: 100%; aspect-ratio: ${ratio.replace(':', '/')}; background: #000; border-radius: 8px; overflow: hidden; border: 2px solid #444;">
                     <img id="img-escena-${escena.numero}" src="${imgUrl}" style="width: 100%; height: 100%; object-fit: cover;">
                     <div id="overlay-escena-${escena.numero}" style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display:none; flex-direction:column; align-items:center; justify-content:center; z-index: 10;">
                         <div class="spinner-small"></div>
-                        <span style="font-size: 0.7rem; color: #fff; margin-top: 10px;">Creando...</span>
+                        <span style="font-size: 0.7rem; color: #fff; margin-top: 10px;">Generando alternativas...</span>
                     </div>
-                    <!-- Previsualización de Subtítulo -->
+                    <!-- Subtítulo interno (Preview) -->
                     <div style="position: absolute; bottom: 10%; left: 0; width: 100%; text-align: center; pointer-events: none;">
-                        <span style="background: rgba(0,0,0,0.6); color: #fff; font-size: 0.7rem; padding: 2px 6px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.2);">
-                            ${escena.texto_narracion || 'Subtítulo aquí'}
+                        <span style="background: rgba(0,0,0,0.7); color: #fff; font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 1px 1px 2px #000;">
+                            ${escena.texto_narracion || ''}
                         </span>
                     </div>
                 </div>
-                <div>
-                    <h4 style="margin:0; font-size: 0.9rem; color: var(--primary-color);">🎬 Escena ${escena.numero}</h4>
-                    <p style="font-size: 0.75rem; color: #aaa; margin: 5px 0; font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                        "${escena.texto_narracion || ''}"
-                    </p>
+                <div style="display: flex; flex-direction: column; gap: 10px; justify-content: space-between;">
+                    <div>
+                        <h4 style="margin:0 0 5px 0; font-size: 1rem; color: var(--primary-color);">🎬 Escena ${escena.numero}</h4>
+                        <p style="font-size: 0.8rem; color: #888; margin-bottom: 10px; line-height: 1.4;">${escena.texto_narracion || ''}</p>
+                        
+                        <label style="font-size: 0.7rem; color: #555; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Descripción Visual (AI Prompt)</label>
+                        <textarea id="prompt-escena-${escena.numero}" style="width: 100%; font-size: 0.85rem; background: #000; color: #ccc; border: 1px solid #333; border-radius: 6px; padding: 10px; min-height: 80px; margin-top: 5px; resize: none; font-family: 'Inter', sans-serif;">${escena.descripcion_visual || ''}</textarea>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary btn-sm" style="flex:1; padding: 12px; font-weight: 600;" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">🔄 Probar 2 nuevas imágenes</button>
+                    </div>
                 </div>
-                <div class="edit-prompt-box">
-                    <label style="font-size: 0.65rem; color: #777; text-transform: uppercase; font-weight: 700;">Prompt Visual:</label>
-                    <textarea id="prompt-escena-${escena.numero}" style="width: 100%; font-size: 0.75rem; background: #111; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 8px; min-height: 50px; margin-top: 4px; font-family: Inter, sans-serif;">${escena.descripcion_visual || ''}</textarea>
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-secondary btn-sm" style="flex:1; font-size: 0.7rem;" onclick="regenerarImagen('${proyectoId}', ${escena.numero})">🔄 Ver más (AI)</button>
-                    <button class="btn btn-nav btn-sm" style="padding: 5px;" title="Ver grande" onclick="window.open('${imgUrl}', '_blank')">🔍</button>
+                <div id="alternativas-${escena.numero}" style="grid-column: 1 / -1; display: none; gap: 15px; padding-top: 15px; border-top: 1px solid #333; margin-top: 5px;">
+                    <!-- Aquí se cargarán las 2 opciones -->
                 </div>
             `;
             grid.appendChild(card);
@@ -927,38 +915,95 @@ async function renderStoryboard(proyectoId) {
     }
 }
 
-async function regenerarImagen(proyectoId, escenaNum) {
+async function regenerarImagenOpciones(proyectoId, escenaNum) {
     const overlay = document.getElementById('overlay-escena-' + escenaNum);
-    const imgEl = document.getElementById('img-escena-' + escenaNum);
+    const alternativasDiv = document.getElementById('alternativas-' + escenaNum);
     const promptInput = document.getElementById('prompt-escena-' + escenaNum).value;
     
     if (overlay) overlay.style.display = 'flex';
+    alternativasDiv.style.display = 'none';
+    alternativasDiv.innerHTML = '';
     
     try {
+        // Pedimos 2 alternativas al servidor (vía Celery)
         const response = await fetch('/api/video/regenerar-imagen', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 proyecto_id: proyectoId,
                 escena_num: escenaNum,
-                prompt_visual: promptInput
+                prompt_visual: promptInput,
+                cantidad: 2
             })
         });
         const data = await response.json();
         
-        if (data.success && data.imagen_path) {
-            let relPath = data.imagen_path.split('videos')[1];
-            if (relPath) relPath = relPath.replace(/\\/g, '/');
-            imgEl.src = '/video_files' + relPath + '?t=' + new Date().getTime();
-            showToast('✅ Imagen actualizada', 'success');
-        } else {
-            showToast('❌ Error al generar nueva imagen', 'error');
+        if (data.success && data.task_id) {
+            // Polling para esperar las imágenes
+            const poll = setInterval(async () => {
+                try {
+                    const st = await fetch(`/api/video/celery-status/${data.task_id}`);
+                    const statusData = await st.json();
+                    
+                    if (statusData.status === 'SUCCESS' && statusData.result) {
+                        clearInterval(poll);
+                        const opciones = statusData.result.opciones;
+                        
+                        alternativasDiv.style.display = 'flex';
+                        opciones.forEach((opt, i) => {
+                            // Convertir ruta absoluta a URL relativa
+                            let relPath = opt.split('videos')[1].replace(/\\/g, '/');
+                            const imgUrl = '/video_files' + relPath;
+                            
+                            const optDiv = document.createElement('div');
+                            optDiv.style.cssText = 'flex: 1; cursor: pointer; border: 2px solid #333; border-radius: 8px; overflow: hidden; transition: all 0.2s; position: relative;';
+                            optDiv.innerHTML = `
+                                <img src="${imgUrl}" style="width: 100%; aspect-ratio: 16/9; object-fit: cover;">
+                                <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.8); color: #fff; font-size: 0.7rem; text-align: center; padding: 5px;">Opción ${i+1}</div>
+                            `;
+                            optDiv.onclick = () => seleccionarAlternativa(proyectoId, escenaNum, opt);
+                            alternativasDiv.appendChild(optDiv);
+                        });
+                        
+                        if (overlay) overlay.style.display = 'none';
+                        showToast('🎨 ¡Opciones listas!', 'success');
+                    } else if (statusData.status === 'FAILURE') {
+                        clearInterval(poll);
+                        if (overlay) overlay.style.display = 'none';
+                        showToast('❌ Error generando alternativas', 'error');
+                    }
+                } catch (e) {
+                    console.error("Error polling image task:", e);
+                }
+            }, 2000);
         }
     } catch (e) {
         console.error(e);
         showToast('❌ Error de red', 'error');
-    } finally {
         if (overlay) overlay.style.display = 'none';
+    }
+}
+
+async function seleccionarAlternativa(proyectoId, escenaNum, pathImg) {
+    try {
+        const response = await fetch('/api/video/seleccionar-imagen', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                proyecto_id: proyectoId,
+                escena_num: escenaNum,
+                imagen_path: pathImg
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            let relPath = pathImg.split('videos')[1].replace(/\\/g, '/');
+            document.getElementById('img-escena-' + escenaNum).src = '/video_files' + relPath + '?t=' + new Date().getTime();
+            document.getElementById('alternativas-' + escenaNum).style.display = 'none';
+            showToast('✅ Imagen actualizada', 'success');
+        }
+    } catch (e) {
+        showToast('❌ Error al seleccionar', 'error');
     }
 }
 

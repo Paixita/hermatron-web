@@ -115,10 +115,10 @@ class GeneradorVoz:
                 calidad = "elevenlabs"
                 eleven_voice_id = voz_actual
 
-            # Edge-TTS (IDs completos)
-            if voz_actual in ["es-ES-AlvaroNeural", "es-CO-GonzaloNeural", "es-MX-JorgeNeural", "es-US-AlonsoNeural", "es-AR-TomasNeural"]:
+            # Edge-TTS (Cualquier voz que empiece con el prefijo de idioma/región)
+            if isinstance(voz_actual, str) and "-" in voz_actual:
                 calidad = "edge-tts"
-                self.voz = voz_actual
+                # No actualizamos self.voz globalmente para evitar colisiones entre usuarios
             
             # --- VERIFICAR CACHÉ ANTES DE GENERAR ---
             hash_audio = self._obtener_hash_audio(texto_limpio, str(voz_actual), calidad)
@@ -149,10 +149,10 @@ class GeneradorVoz:
             if calidad in ["edge-tts", "elevenlabs"]:  # Fallback de elevenlabs
                 try:
                     # Parámetros suaves para sonar menos “robótico”
-                    exito = await self._generar_edge_tts(texto_limpio, ruta_completa, velocidad=0.95, tono=0)
+                    exito = await self._generar_edge_tts(texto_limpio, ruta_completa, voz=voz_actual, velocidad=0.95, tono=0)
                     if exito:
                         self._guardar_en_cache(hash_audio, ruta_completa)
-                        print(f"[TTS] ✅ edge-tts ({self.voz}): {ruta_completa}")
+                        print(f"[TTS] ✅ edge-tts ({voz_actual}): {ruta_completa}")
                         return str(ruta_completa)
                 except Exception as e:
                     print(f"[TTS] edge-tts falló: {e}")
@@ -180,22 +180,25 @@ class GeneradorVoz:
             traceback.print_exc()
             return False
 
-    async def _generar_edge_tts(self, texto: str, ruta: Path, velocidad: float = 1.0, tono: int = 0) -> bool:
+    async def _generar_edge_tts(self, texto: str, ruta: Path, voz: str = None, velocidad: float = 1.0, tono: int = 0) -> bool:
         """Generar audio con edge-tts (Microsoft - GRATIS, calidad casi humana)
         
         Args:
             texto: Texto a convertir en voz
             ruta: Ruta de salida del archivo MP3
+            voz: ID de la voz (ej: es-CO-GonzaloNeural)
             velocidad: Velocidad de reproducción (0.5 a 2.0, default 1.0)
             tono: Tono de voz (-50 a 50, default 0)
         """
         try:
             import edge_tts
             
+            voz_final = voz if voz else self.voz
+            
             # Construir parámetros SSML para mejor control
             communicate = edge_tts.Communicate(
                 texto, 
-                self.voz,
+                voz_final,
                 rate=f"{int((velocidad - 1) * 100):+d}%",  # Conversión a porcentaje
                 pitch=f"{int(tono):+d}Hz"
             )

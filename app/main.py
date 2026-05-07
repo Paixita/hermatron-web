@@ -42,6 +42,8 @@ from .busqueda import buscador
 from . import auth
 from .video import generador_video, VideoEstado
 from .modos import listar_modos
+from .video_manager import pre_producir_video_task, regenerar_imagen_task, ensamblar_video_task
+from .celery_app import celery
 
 print(f"DEBUG: GROQ_API_KEY cargada? {bool(GROQ_API_KEY)}")
 if GROQ_API_KEY:
@@ -1020,28 +1022,10 @@ async def _proceso_crear_video(proyecto_id: str, tema: str, prompt: str, voz: st
         print(f"Error en video background: {e}")
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
 
-async def _proceso_pre_produccion(proyecto_id: str, tema: str, prompt: str, voz: str):
-    try:
-        await generador_video.analizar_tema(tema, prompt, client, proyecto_id=proyecto_id)
-        await generador_video.disenar_escenas(proyecto_id, client)
-        
-        if hasattr(generador_video, '_cargar_proyecto'):
-            proj_obj = generador_video._cargar_proyecto(proyecto_id)
-            if proj_obj:
-                proj_obj.voz = voz
-                generador_video._guardar_proyecto(proj_obj)
-        
-        await generador_video.pre_producir_video(proyecto_id)
-    except Exception as e:
-        print(f"Error en pre-produccion background: {e}")
-        generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
+# Funciones de background delegadas a Celery
+# Se mantienen los wrappers si es necesario, pero los endpoints llamarán directamente a .delay()
 
-async def _proceso_ensamblar(proyecto_id: str, resolucion: str = "1080"):
-    try:
-        await generador_video.ensamblar_video_final(proyecto_id=proyecto_id, generar_voz_func=None, resolucion=resolucion)
-    except Exception as e:
-        print(f"Error en ensamblaje background: {e}")
-        generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
+# _proceso_ensamblar removido a favor de ensamblar_video_task.delay()
 
 @app.post("/api/video/crear")
 async def crear_video_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
@@ -1052,34 +1036,83 @@ async def crear_video_endpoint(req: VideoRequest, background_tasks: BackgroundTa
     return {"video_id": proyecto_id, "estado": "analizando"}
 
 @app.post("/api/video/pre-produccion")
-async def pre_produccion_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
+async def pre_produccion_endpoint(req: VideoRequest):
     proyecto_id = f"proyecto_{int(time.time())}"
     generador_video.videos_dir.mkdir(exist_ok=True)
     tema_con_formato = f"{req.tema} ({req.formato})"
-    background_tasks.add_task(_proceso_pre_produccion, proyecto_id, tema_con_formato, req.prompt + f" Estilo: {req.estilo}", req.voz)
+    
+    # Lanzar tarea en Celery
+    payload = {
+        "proyecto_id": proyecto_id,
+        "tema": tema_con_formato,
+        "prompt": req.prompt + f" Estilo: {req.estilo}",
+        "voz": req.voz
+    }
+    pre_producir_video_task.delay(payload)
+    
     return {"video_id": proyecto_id, "estado": "analizando"}
 
 class RegenerarImagenRequest(BaseModel):
     proyecto_id: str
     escena_num: int
     prompt_visual: Optional[str] = None
+    cantidad: Optional[int] = 1
 
 @app.post("/api/video/regenerar-imagen")
 async def regenerar_imagen_endpoint(req: RegenerarImagenRequest):
+    # Usar Celery para no bloquear el proceso principal
+    task = regenerar_imagen_task.delay(req.proyecto_id, req.escena_num, req.prompt_visual, req.cantidad)
+    return {"success": True, "task_id": task.id}
+
+class SeleccionarImagenRequest(BaseModel):
+    proyecto_id: str
+    escena_num: int
+    imagen_path: str
+
+@app.post("/api/video/seleccionar-imagen")
+async def seleccionar_imagen_endpoint(req: SeleccionarImagenRequest):
     try:
-        nueva_ruta = await generador_video.regenerar_imagen_escena(req.proyecto_id, req.escena_num, req.prompt_visual)
-        return {"success": True, "imagen_path": nueva_ruta}
+        # Actualizar el proyecto con la ruta de la imagen seleccionada
+        proj_obj = generador_video._cargar_proyecto(req.proyecto_id)
+        if not proj_obj:
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        
+        # Mover la imagen seleccionada al path principal 'imagen.png' si es una alternativa
+        dest_path = generador_video._get_proyecto_dir(req.proyecto_id) / f"escena_{req.escena_num}" / "imagen.png"
+        if req.imagen_path != str(dest_path):
+            import shutil
+            shutil.copy2(req.imagen_path, dest_path)
+        
+        for e in proj_obj.escenas_disenadas:
+            if e["numero"] == req.escena_num:
+                e["imagen_path"] = str(dest_path)
+                break
+        
+        generador_video._guardar_proyecto(proj_obj)
+        return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/video/celery-status/{task_id}")
+async def celery_status(task_id: str):
+    """Consulta el estado de una tarea de Celery genérica."""
+    from celery.result import AsyncResult
+    res = AsyncResult(task_id, app=celery)
+    return {
+        "task_id": task_id,
+        "status": res.status,
+        "result": res.result if res.ready() else None,
+        "info": res.info if isinstance(res.info, dict) else {"msg": str(res.info)}
+    }
 
 class EnsamblarRequest(BaseModel):
     proyecto_id: str
     resolucion: Optional[str] = "1080"
 
 @app.post("/api/video/ensamblar")
-async def ensamblar_endpoint(req: EnsamblarRequest, background_tasks: BackgroundTasks):
-    # Pasamos la resolución seleccionada al ensamblador
-    background_tasks.add_task(_proceso_ensamblar, req.proyecto_id, req.resolucion)
+async def ensamblar_endpoint(req: EnsamblarRequest):
+    # Lanzar tarea en Celery
+    ensamblar_video_task.delay(req.proyecto_id, req.resolucion)
     return {"success": True, "estado": "ensamblando"}
 
 class ExportarPCRequest(BaseModel):
