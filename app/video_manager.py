@@ -9,7 +9,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-from .celery_app import celery
+# from .celery_app import celery
 from .video import generador_video, VideoEstado
 from .voz import generador_voz
 from .config import GROQ_API_KEY
@@ -30,8 +30,7 @@ def run_async(coro):
         return asyncio.ensure_future(coro)
     return loop.run_until_complete(coro)
 
-@celery.task(bind=True)
-def pre_producir_video_task(self, payload: Dict[str, Any]):
+def pre_producir_video_task(payload: Dict[str, Any]):
     """Fase 1-5: Analiza, diseña escenas y genera imágenes (Storyboard)."""
     proyecto_id = payload.get("proyecto_id")
     tema = payload.get("tema")
@@ -40,11 +39,11 @@ def pre_producir_video_task(self, payload: Dict[str, Any]):
     
     try:
         # 1. Analizar tema
-        self.update_state(state="ANALIZANDO", meta={"progreso": 10})
+        # self.update_state(state="ANALIZANDO", meta={"progreso": 10})
         run_async(generador_video.analizar_tema(tema, prompt, client, proyecto_id=proyecto_id))
         
         # 2. Diseñar escenas
-        self.update_state(state="DISENANDO", meta={"progreso": 30})
+        # self.update_state(state="DISENANDO", meta={"progreso": 30})
         run_async(generador_video.disenar_escenas(proyecto_id, client))
         
         # Configurar la voz en el proyecto
@@ -54,36 +53,28 @@ def pre_producir_video_task(self, payload: Dict[str, Any]):
             generador_video._guardar_proyecto(proj_obj)
         
         # 3. Pre-producir (Generar imágenes)
-        self.update_state(state="GENERANDO_IMAGENES", meta={"progreso": 50})
+        # self.update_state(state="GENERANDO_IMAGENES", meta={"progreso": 50})
         run_async(generador_video.pre_producir_video(proyecto_id))
         
-        self.update_state(state="LISTO_PARA_REVISION", meta={"progreso": 100})
+        # self.update_state(state="LISTO_PARA_REVISION", meta={"progreso": 100})
         return {"status": "success", "proyecto_id": proyecto_id}
         
     except Exception as e:
-        self.update_state(state="ERROR", meta={"error": str(e)})
+        # self.update_state(state="ERROR", meta={"error": str(e)})
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
         raise e
 
-@celery.task(bind=True)
-def regenerar_imagen_task(self, proyecto_id: str, escena_num: int, nuevo_prompt: Optional[str] = None, cantidad: int = 1):
+def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt: Optional[str] = None, cantidad: int = 1):
     """Regenera la imagen de una escena específica (permite generar múltiples opciones)."""
     try:
-        self.update_state(state="REGENERANDO_IMAGEN", meta={"progreso": 20})
+        # self.update_state(state="REGENERANDO_IMAGEN", meta={"progreso": 20})
         opciones = []
         
         # Si cantidad > 1, generamos archivos temporales distintos
         for i in range(cantidad):
             suffix = f"_alt_{i}" if i > 0 else ""
-            # Nota: generador_video.regenerar_imagen_escena guarda en el proyecto.
-            # Para alternativas, podríamos manejarlo distinto, pero por ahora generamos N veces.
             ruta = run_async(generador_video.regenerar_imagen_escena(proyecto_id, escena_num, nuevo_prompt))
-            # Si queremos que sean distintas, el prompt debería variar ligeramente o la seed.
-            # generador_video usa Pollinations con seed aleatoria, así que saldrán distintas.
             
-            # Para evitar sobreescribir la misma imagen.png, movemos la anterior si i > 0
-            # pero generador_video ya sobreescribe imagen.png. 
-            # Modificación rápida: copiar a un path alternativo.
             if i > 0:
                 p = Path(ruta)
                 alt_path = p.parent / f"imagen_alt_{i}.png"
@@ -93,27 +84,26 @@ def regenerar_imagen_task(self, proyecto_id: str, escena_num: int, nuevo_prompt:
             else:
                 opciones.append(ruta)
             
-            self.update_state(state="REGENERANDO_IMAGEN", meta={"progreso": 20 + int((i+1)/cantidad * 60)})
+            # self.update_state(state="REGENERANDO_IMAGEN", meta={"progreso": 20 + int((i+1)/cantidad * 60)})
             
-        self.update_state(state="COMPLETO", meta={"progreso": 100})
+        # self.update_state(state="COMPLETO", meta={"progreso": 100})
         return {"success": True, "opciones": opciones}
     except Exception as e:
-        self.update_state(state="ERROR", meta={"error": str(e)})
+        # self.update_state(state="ERROR", meta={"error": str(e)})
         raise e
 
-@celery.task(bind=True)
-def ensamblar_video_task(self, proyecto_id: str, resolucion: str = "1080"):
+def ensamblar_video_task(proyecto_id: str, resolucion: str = "1080"):
     """Fase 6-7: Genera voz y ensambla el video final."""
     try:
-        self.update_state(state="ENSAMBLANDO", meta={"progreso": 10})
+        # self.update_state(state="ENSAMBLANDO", meta={"progreso": 10})
         video_final = run_async(generador_video.ensamblar_video_final(
             proyecto_id=proyecto_id, 
             generar_voz_func=None, 
             resolucion=resolucion
         ))
-        self.update_state(state="COMPLETO", meta={"progreso": 100})
+        # self.update_state(state="COMPLETO", meta={"progreso": 100})
         return {"status": "success", "video_url": f"/video_files/{Path(video_final).name}"}
     except Exception as e:
-        self.update_state(state="ERROR", meta={"error": str(e)})
+        # self.update_state(state="ERROR", meta={"error": str(e)})
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
         raise e

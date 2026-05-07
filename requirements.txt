@@ -31,6 +31,4 @@ psutil>=5.9.0
 Pillow          # Generar imágenes/thumbnails
 # Nota: moviepy ha sido eliminado para optimizar memoria en Render (se usa FFmpeg nativo)
 
-# Colas de tareas (Escalabilidad)
-celery>=5.3.6
-redis>=5.0.1
+

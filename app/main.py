@@ -43,7 +43,7 @@ from . import auth
 from .video import generador_video, VideoEstado
 from .modos import listar_modos
 from .video_manager import pre_producir_video_task, regenerar_imagen_task, ensamblar_video_task
-from .celery_app import celery
+# from .celery_app import celery # Removido para modo gratuito
 
 print(f"DEBUG: GROQ_API_KEY cargada? {bool(GROQ_API_KEY)}")
 if GROQ_API_KEY:
@@ -1034,21 +1034,21 @@ async def crear_video_endpoint(req: VideoRequest, background_tasks: BackgroundTa
     tema_con_formato = f"{req.tema} ({req.formato})"
     background_tasks.add_task(_proceso_crear_video, proyecto_id, tema_con_formato, req.prompt + f" Estilo: {req.estilo}", req.voz)
     return {"video_id": proyecto_id, "estado": "analizando"}
-
 @app.post("/api/video/pre-produccion")
-async def pre_produccion_endpoint(req: VideoRequest):
+async def pre_produccion_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
     proyecto_id = f"proyecto_{int(time.time())}"
     generador_video.videos_dir.mkdir(exist_ok=True)
     tema_con_formato = f"{req.tema} ({req.formato})"
     
-    # Lanzar tarea en Celery
     payload = {
         "proyecto_id": proyecto_id,
         "tema": tema_con_formato,
         "prompt": req.prompt + f" Estilo: {req.estilo}",
         "voz": req.voz
     }
-    pre_producir_video_task.delay(payload)
+    
+    # Lanzar tarea en background (GRATIS)
+    background_tasks.add_task(pre_producir_video_task, payload)
     
     return {"video_id": proyecto_id, "estado": "analizando"}
 
@@ -1059,10 +1059,10 @@ class RegenerarImagenRequest(BaseModel):
     cantidad: Optional[int] = 1
 
 @app.post("/api/video/regenerar-imagen")
-async def regenerar_imagen_endpoint(req: RegenerarImagenRequest):
-    # Usar Celery para no bloquear el proceso principal
-    task = regenerar_imagen_task.delay(req.proyecto_id, req.escena_num, req.prompt_visual, req.cantidad)
-    return {"success": True, "task_id": task.id}
+async def regenerar_imagen_endpoint(req: RegenerarImagenRequest, background_tasks: BackgroundTasks):
+    # Usar BackgroundTasks gratuito
+    background_tasks.add_task(regenerar_imagen_task, req.proyecto_id, req.escena_num, req.prompt_visual, req.cantidad)
+    return {"success": True, "msg": "Regenerando imágenes en segundo plano"}
 
 class SeleccionarImagenRequest(BaseModel):
     proyecto_id: str
@@ -1110,9 +1110,8 @@ class EnsamblarRequest(BaseModel):
     resolucion: Optional[str] = "1080"
 
 @app.post("/api/video/ensamblar")
-async def ensamblar_endpoint(req: EnsamblarRequest):
-    # Lanzar tarea en Celery
-    ensamblar_video_task.delay(req.proyecto_id, req.resolucion)
+async def ensamblar_video_endpoint(req: EnsamblarRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(ensamblar_video_task, req.proyecto_id, req.resolucion)
     return {"success": True, "estado": "ensamblando"}
 
 class ExportarPCRequest(BaseModel):
