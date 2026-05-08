@@ -293,6 +293,7 @@ Para cada escena debes definir:
 
 REGLAS CRÍTICAS:
 - CADA ESCENA debe tener un 'texto_narracion' de al menos 20 palabras. NO lo dejes vacío.
+- GENERA AL MENOS 5 ESCENAS para que el video sea dinámico y profesional.
 - CADA ESCENA debe ser COHERENTE con las demás (misma línea visual)
 - La escena 1 debe tener un HOOK visual impactante
 - Las transiciones entre escenas deben ser fluidas
@@ -605,6 +606,12 @@ Responde SOLO JSON:
         video_final = await self._ensamblar_video(
             proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion
         )
+        
+        if not video_final or not Path(video_final).exists():
+             print("[VIDEO] Error crítico: El ensamblaje no generó archivo.")
+             self._actualizar_estado(proyecto_id, VideoEstado.ERROR, "Error en ensamblaje de FFmpeg")
+             return ""
+
         self._actualizar_progreso(proyecto_id, 100)
 
         proyecto.estado = VideoEstado.COMPLETADO
