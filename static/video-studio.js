@@ -858,54 +858,40 @@ async function renderStoryboard(proyectoId) {
         const ratio = data.formato || '16:9';
 
         escenas.forEach(escena => {
-            let relPath = escena.imagen_path ? escena.imagen_path.split('videos')[1] : null;
+            // Limpieza de rutas para compatibilidad entre Windows/Linux
+            let relPath = escena.imagen_path ? (escena.imagen_path.includes('videos') ? escena.imagen_path.split('videos')[1] : escena.imagen_path) : null;
             if (relPath) relPath = relPath.replace(/\\/g, '/');
             const imgUrl = relPath ? '/video_files' + relPath : '';
-
-            const card = document.createElement('div');
-            card.className = 'storyboard-card';
-            card.style.cssText = `
-                background: #1a1a1f; 
-                border-radius: 12px; 
-                padding: 15px; 
-                border: 1px solid #333; 
-                display: grid; 
-                grid-template-columns: ${ratio === '16:9' ? '1.5fr 1fr' : '1fr 1.5fr'}; 
-                gap: 20px; 
-                margin-bottom: 20px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            `;
             
+            const card = document.createElement('div');
+            card.className = 'storyboard-card-new';
             card.innerHTML = `
-                <div style="position: relative; width: 100%; aspect-ratio: ${ratio.replace(':', '/')}; background: #000; border-radius: 8px; overflow: hidden; border: 2px solid #444;">
-                    <img id="img-escena-${escena.numero}" src="${imgUrl}" style="width: 100%; height: 100%; object-fit: cover;">
-                    <div id="overlay-escena-${escena.numero}" style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display:none; flex-direction:column; align-items:center; justify-content:center; z-index: 10;">
+                <div class="sc-header">
+                    <span>🎬 Escena ${escena.numero}</span>
+                </div>
+                <div class="sc-image-wrap" style="aspect-ratio: ${ratio.replace(':', '/')};">
+                    <img id="img-escena-${escena.numero}" src="${imgUrl}" 
+                         onerror="this.src='https://via.placeholder.com/400x700?text=Error+al+cargar+imagen'"
+                         loading="lazy">
+                    <div id="overlay-escena-${escena.numero}" class="sc-overlay">
                         <div class="spinner-small"></div>
-                        <span style="font-size: 0.7rem; color: #fff; margin-top: 10px;">Generando alternativas...</span>
+                        <span>Generando...</span>
                     </div>
-                    <!-- Subtítulo interno (Preview) -->
-                    <div style="position: absolute; bottom: 10%; left: 0; width: 100%; text-align: center; pointer-events: none;">
-                        <span style="background: rgba(0,0,0,0.7); color: #fff; font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); text-shadow: 1px 1px 2px #000;">
-                            ${escena.texto_narracion || ''}
-                        </span>
+                    <div class="sc-caption-preview">${escena.texto_narracion || ''}</div>
+                </div>
+                <div class="sc-content">
+                    <p class="sc-narration">${escena.texto_narracion || ''}</p>
+                    <div class="sc-prompt-box">
+                        <label>Descripción Visual (AI Prompt)</label>
+                        <textarea id="prompt-escena-${escena.numero}">${escena.descripcion_visual || ''}</textarea>
+                    </div>
+                    <div class="sc-actions">
+                        <button class="btn btn-secondary btn-block" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">
+                            🔄 Probar alternativas
+                        </button>
                     </div>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 10px; justify-content: space-between;">
-                    <div>
-                        <h4 style="margin:0 0 5px 0; font-size: 1rem; color: var(--primary-color);">🎬 Escena ${escena.numero}</h4>
-                        <p style="font-size: 0.8rem; color: #888; margin-bottom: 10px; line-height: 1.4;">${escena.texto_narracion || ''}</p>
-                        
-                        <label style="font-size: 0.7rem; color: #555; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Descripción Visual (AI Prompt)</label>
-                        <textarea id="prompt-escena-${escena.numero}" style="width: 100%; font-size: 0.85rem; background: #000; color: #ccc; border: 1px solid #333; border-radius: 6px; padding: 10px; min-height: 80px; margin-top: 5px; resize: none; font-family: 'Inter', sans-serif;">${escena.descripcion_visual || ''}</textarea>
-                    </div>
-                    
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-secondary btn-sm" style="flex:1; padding: 12px; font-weight: 600;" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">🔄 Probar 2 nuevas imágenes</button>
-                    </div>
-                </div>
-                <div id="alternativas-${escena.numero}" style="grid-column: 1 / -1; display: none; gap: 15px; padding-top: 15px; border-top: 1px solid #333; margin-top: 5px;">
-                    <!-- Aquí se cargarán las 2 opciones -->
-                </div>
+                <div id="alternativas-${escena.numero}" class="sc-alternativas"></div>
             `;
             grid.appendChild(card);
         });

@@ -1,1 +1,158 @@
-/* El contenido de este archivo ha sido movido a styles.css para evitar conflictos de diseño. */
+/* NUEVO DISEÑO STORYBOARD PROFESIONAL */
+.storyboard-grid-new {
+    display: flex !important;
+    gap: 25px;
+    overflow-x: auto;
+    padding: 10px 10px 30px 10px;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) transparent;
+}
+
+.storyboard-grid-new::-webkit-scrollbar {
+    height: 8px;
+}
+
+.storyboard-grid-new::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 10px;
+}
+
+.storyboard-card-new {
+    min-width: 380px;
+    max-width: 420px;
+    flex-shrink: 0;
+    background: #111116;
+    border-radius: 16px;
+    border: 1px solid #222;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.storyboard-card-new:hover {
+    transform: translateY(-5px);
+    border-color: var(--primary-color);
+}
+
+.sc-header {
+    padding: 12px 15px;
+    background: #1a1a20;
+    border-bottom: 1px solid #222;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sc-header span {
+    font-weight: 700;
+    color: var(--primary-color);
+    font-size: 0.9rem;
+}
+
+.sc-image-wrap {
+    position: relative;
+    width: 100%;
+    background: #000;
+    overflow: hidden;
+}
+
+.sc-image-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.storyboard-card-new:hover .sc-image-wrap img {
+    transform: scale(1.05);
+}
+
+.sc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+}
+
+.sc-caption-preview {
+    position: absolute;
+    bottom: 15px;
+    left: 10px;
+    right: 10px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.sc-caption-preview span, .sc-caption-preview {
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.sc-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    flex: 1;
+}
+
+.sc-narration {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: #aaa;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sc-prompt-box label {
+    display: block;
+    font-size: 0.7rem;
+    color: #555;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+.sc-prompt-box textarea {
+    width: 100%;
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: #ccc;
+    font-size: 0.8rem;
+    padding: 10px;
+    min-height: 80px;
+    resize: none;
+}
+
+.sc-actions {
+    margin-top: auto;
+}
+
+.sc-alternativas {
+    display: none;
+    padding: 15px;
+    background: #09090b;
+    gap: 10px;
+    border-top: 1px solid #222;
+}
+
+.btn-block {
+    width: 100%;
+}
