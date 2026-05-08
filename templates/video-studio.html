@@ -166,64 +166,46 @@
                     </div>
                 </div>
 
-                <div class="studio-preview-container">
-                    <div id="previewPlaceholder" class="preview-placeholder">
-                        <div class="placeholder-icon">🎬</div>
-                        <p>Ingresa los datos a la izquierda y pulsa <strong>Crear Video</strong></p>
-                        <p class="small">El video aparecerá aquí cuando esté listo.</p>
-                    </div>
-
-                    <!-- STORYBOARD EDITOR -->
-                    <div id="storyboardContainer" class="storyboard-container" style="display:none; padding: 20px; text-align: left; overflow-y: auto; max-height: 70vh;">
-                        <h3 style="color: var(--primary-color); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-                            <span>🎞️ Storyboard / Editor de Escenas</span>
-                            <button class="btn btn-success" onclick="ensamblarVideoFinal()">🎬 Renderizar Video Final</button>
-                        </h3>
-                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
-                            Revisa las imágenes generadas. Si alguna no te gusta, cámbiala antes de renderizar el video final.
-                        </p>
-                        
-                        <div id="storyboardGrid" class="storyboard-grid-new">
-                            <!-- Las tarjetas de escenas se inyectarán aquí -->
+                <div class="studio-content-layout">
+                    <!-- Parte Izquierda: Video / Placeholder -->
+                    <div class="studio-preview-area">
+                        <div id="previewPlaceholder" class="preview-placeholder">
+                            <div class="placeholder-icon">🎬</div>
+                            <p>Ingresa los datos a la izquierda y pulsa <strong>Crear Video</strong></p>
+                            <p class="small">El video aparecerá aquí cuando esté listo.</p>
                         </div>
-                    </div>
 
-                    <div id="previewVideoWrap" class="video-player-container" style="display:none; margin-bottom: 20px;">
-                        <div id="previewLoading" class="video-loading">
-                            <div class="spinner-small"></div>
-                            <span>Cargando video...</span>
-                        </div>
-                        <video id="previewVideo" class="video-player" controls preload="auto">
-                            Tu navegador no soporta videos.
-                        </video>
-                        <div id="pauseOverlay" class="video-pause-overlay" onclick="togglePausePreview()">
-                            <span id="pauseOverlayIcon">▶️</span>
-                        </div>
-                    </div>
-
-                    <div id="previewActions" class="preview-actions-bar" style="display:none">
-                        <div class="video-info-mini">
-                            <h4 id="videoInfoTema">-</h4>
-                            <div class="video-meta-inline">
-                                <span id="videoMetaFecha">📅 -</span>
-                                <span id="videoMetaTamano">📦 -</span>
-                                <span id="videoMetaEscenas">🎬 -</span>
+                        <div id="previewVideoWrap" class="video-player-container" style="display:none;">
+                            <div id="previewLoading" class="video-loading">
+                                <div class="spinner-small"></div>
+                                <span>Cargando video...</span>
                             </div>
+                            <video id="previewVideo" class="video-player" controls preload="auto">
+                                Tu navegador no soporta videos.
+                            </video>
                         </div>
-                        <div class="video-buttons">
-                            <button class="btn btn-secondary btn-sm" onclick="reproducirPreview()">▶️ Play</button>
+
+                        <div id="previewActions" class="preview-actions-bar" style="display:none">
+                            <!-- Acciones del video -->
                             <div class="export-group">
                                 <select id="exportResolution" class="select-sm">
-                                    <option value="720">720p (HD)</option>
-                                    <option value="1080" selected>1080p (FHD)</option>
-                                    <option value="1920">1920 (2K)</option>
-                                    <option value="2160">4K (UHD)</option>
+                                    <option value="1080" selected>1080p</option>
+                                    <option value="720">720p</option>
                                 </select>
                                 <button class="btn btn-primary btn-sm" onclick="descargarVideoActual()">⬇️ Web</button>
-                                <button class="btn btn-success btn-sm" onclick="guardarEnPC()">💾 Guardar en PC</button>
+                                <button class="btn btn-success btn-sm" onclick="guardarEnPC()">💾 PC</button>
                             </div>
-                            <button class="btn btn-warning btn-sm" onclick="descargarIDMActual()">📥 IDM</button>
-                            <button class="btn btn-danger btn-sm" onclick="eliminarVideoActual()">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+
+                    <!-- Parte Derecha: Storyboard Vertical -->
+                    <div id="storyboardContainer" class="storyboard-vertical-sidebar" style="display:none;">
+                        <div class="sc-sidebar-header">
+                            <h3>🎞️ Escenas</h3>
+                            <button class="btn btn-success btn-sm" onclick="ensamblarVideoFinal()">🎬 Renderizar</button>
+                        </div>
+                        <div id="storyboardGrid" class="storyboard-grid-vertical">
+                            <!-- Las tarjetas de escenas se inyectarán aquí -->
                         </div>
                     </div>
                 </div>
