@@ -1174,30 +1174,27 @@ Responde SOLO JSON:
             except Exception:
                 pass
 
-            fps = 20  # Conservador para Render (512MB RAM)
+            fps = 30  # Subido a 30 para evitar el efecto de 'tildarse' (lag)
 
             # ── PASO 1: clip por escena con Ken Burns ─────────────────
             clips = []
-            # Reducir zoom inicial a 1.05 (5% de recorte) para evitar mucho acercamiento
-            sw = int(w * 1.05); sw = sw if sw % 2 == 0 else sw + 1
-            sh = int(h * 1.05); sh = sh if sh % 2 == 0 else sh + 1
 
             for i, (img_path, _) in enumerate(imagenes):
                 dur_escena = duraciones_escenas[i]
                 d_frames = int(dur_escena * fps)
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
                 
-                # Zoom sutil (paneo más lento, 0.0006)
+                # Zoom más veloz (0.0015) para evitar el lag/tildado
                 if i % 2 == 0:
-                    # Zoom In suave
-                    zoom_expr = "zoom+0.0006"
+                    # Zoom In
+                    zoom_expr = "zoom+0.0015"
                 else:
-                    # Zoom Out suave (no bajar de 1.0)
-                    zoom_expr = "if(eq(on,1),1.05,max(1.001,zoom-0.0006))"
+                    # Zoom Out
+                    zoom_expr = "if(eq(on,1),1.15,max(1.001,zoom-0.0015))"
                 
                 vf_zoom = (
-                    f"scale={sw}:{sh}:force_original_aspect_ratio=increase,"
-                    f"crop={sw}:{sh},"
+                    f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                    f"crop={w}:{h},"
                     f"zoompan=z='{zoom_expr}':d={d_frames}:"
                     f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps={fps}"
                 )
@@ -1241,7 +1238,15 @@ Responde SOLO JSON:
 
             # ── PASO 3: SRT sincronizado ──────────────────────────────
             srt_path = work_dir / "subtitulos.srt"
-            srt_path.write_text(self._generar_srt(imagenes, duraciones_escenas), encoding="utf-8")
+            srt_generado = False
+            
+            if audio_path and Path(audio_path).exists():
+                print("[VIDEO] Solicitando subtítulos exactos a Groq Whisper...")
+                srt_generado = await self._generar_srt_con_whisper(audio_path, str(srt_path))
+                
+            if not srt_generado:
+                print("[VIDEO] Fallback: generando subtítulos matemáticos...")
+                srt_path.write_text(self._generar_srt(imagenes, duraciones_escenas), encoding="utf-8")
 
             # ── PASO 4: audio + subtítulos ────────────────────────────
             # Tamaño profesional fijo (libass usa PlayResY base)
@@ -1347,6 +1352,45 @@ Responde SOLO JSON:
         sec = int(s % 60); ms = int(round((s - int(s)) * 1000))
         return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
 
+    async def _generar_srt_con_whisper(self, audio_path: str, srt_path: str) -> bool:
+        """Usa Groq Whisper para transcribir el audio y generar un SRT perfecto"""
+        try:
+            import groq
+            from app.config import GROQ_API_KEY
+            import os
+            
+            if not GROQ_API_KEY:
+                print("[WHISPER] No hay GROQ_API_KEY, usando fallback matemático.")
+                return False
+                
+            client = groq.AsyncGroq(api_key=GROQ_API_KEY)
+            
+            with open(audio_path, "rb") as file:
+                transcription = await client.audio.transcriptions.create(
+                    file=(os.path.basename(audio_path), file.read()),
+                    model="whisper-large-v3",
+                    response_format="verbose_json",
+                    language="es"
+                )
+            
+            lines = []
+            # Whisper devuelve los segments con 'start', 'end' y 'text'
+            for i, segment in enumerate(transcription.segments, 1):
+                start = self._fmt_srt(segment["start"])
+                end = self._fmt_srt(segment["end"])
+                text = segment["text"].strip()
+                if text:
+                    lines.extend([str(i), f"{start} --> {end}", text, ""])
+                    
+            with open(srt_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+                
+            print("[WHISPER] Subtítulos generados con éxito!")
+            return True
+        except Exception as e:
+            print(f"[WHISPER] Error generando SRT: {e}")
+            return False
+
 
 
     async def _verificar_ffmpeg(self) -> Optional[str]:
@@ -1403,21 +1447,31 @@ Responde SOLO JSON:
         return 0.0
 
     def _obtener_duracion_audio(self, ruta_audio: str) -> float:
-        """Obtener duración del audio usando ffprobe"""
+        """Obtener duración del audio usando ffprobe con fallback de tamaño de archivo"""
         import subprocess
+        for p in ["ffprobe", r"C:\ffmpeg\bin\ffprobe.exe"]:
+            try:
+                result = subprocess.run(
+                    [p, "-v", "error", "-show_entries", "format=duration", 
+                     "-of", "default=noprint_wrappers=1:nokey=1", ruta_audio],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return round(float(result.stdout.strip()), 2)
+            except Exception:
+                continue
+                
+        # Si ffprobe falla totalmente, usamos un cálculo matemático robusto (salvavidas real)
+        print("[AUDIO] ffprobe falló al leer duración. Usando fallback matemático.")
         try:
-            for p in ["ffprobe", r"C:\ffmpeg\bin\ffprobe.exe"]:
-                if Path(p).exists() or p == "ffprobe":
-                    result = subprocess.run(
-                        [p, "-v", "quiet", "-print_format", "json",
-                         "-show_format", ruta_audio],
-                        capture_output=True, text=True, timeout=10
-                    )
-                    if result.returncode == 0:
-                        data = json.loads(result.stdout)
-                        return round(float(data.get("format", {}).get("duration", 30)), 2)
+            # Asumimos que el MP3 está a 128kbps (aprox 16000 bytes por segundo)
+            size_bytes = Path(ruta_audio).stat().st_size
+            dur = size_bytes / 16000.0
+            if dur > 0: 
+                return round(dur, 2)
         except Exception:
             pass
+            
         return 30.0
 
     def _formatear_tamano(self, bytes: int) -> str:
