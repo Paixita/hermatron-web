@@ -797,21 +797,20 @@ Responde SOLO JSON:
         import urllib.parse
         import random
 
-        # Limitamos a 1000 caracteres para no romper la URL, pero evitamos cortar la idea principal
-        query_limpio = query[:1000].replace("\n", " ").replace('"', "").strip()
-
+        # ── OPTIMIZACIÓN DE PROMPT (Director de Arte IA) ──
+        query_opt = await self._optimizar_prompt_imagen(query_limpio)
+        query_cod = urllib.parse.quote(query_opt)
+        
         # ── FUENTE 1: Pollinations.ai (IA Generativa Principal) ──
-        # Respetar el width y height para 16:9 o 9:16
         gen_w, gen_h = width, height
         seed = random.randint(1, 99999)
-        query_cod = urllib.parse.quote(query_limpio)
         url_poll = (
             f"https://image.pollinations.ai/prompt/{query_cod}"
             f"?width={gen_w}&height={gen_h}&nologo=true&seed={seed}&model=flux"
         )
         try:
-            print(f"[IMAGENES] Pollinations 720p: {query_limpio[:50]}...")
-            async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as hc:
+            print(f"[IMAGENES] Pollinations 720p: {query_opt[:50]}...")
+            async with httpx.AsyncClient(timeout=50.0, follow_redirects=True) as hc:
                 resp = await hc.get(url_poll)
                 if resp.status_code == 200 and len(resp.content) > 15000:
                     with open(ruta_salida, "wb") as f:
@@ -1184,25 +1183,26 @@ Responde SOLO JSON:
                 d_frames = int(dur_escena * fps)
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
                 
-                # Zoom más veloz (0.0015) para evitar el lag/tildado
+                # Zoom estabilizado (centrado matemático perfecto para evitar el "baile")
                 if i % 2 == 0:
-                    # Zoom In
-                    zoom_expr = "zoom+0.0015"
+                    # Zoom In estable
+                    zoom_expr = "zoom+0.0012"
                 else:
-                    # Zoom Out
-                    zoom_expr = "if(eq(on,1),1.15,max(1.001,zoom-0.0015))"
+                    # Zoom Out estable (empezar en 1.1)
+                    zoom_expr = "if(eq(on,1),1.1,max(1.001,zoom-0.0012))"
                 
+                # Usamos (iw-iw/zoom)/2 para centrado perfecto sin saltos de píxel
                 vf_zoom = (
                     f"scale={w}:{h}:force_original_aspect_ratio=increase,"
                     f"crop={w}:{h},"
                     f"zoompan=z='{zoom_expr}':d={d_frames}:"
-                    f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps={fps}"
+                    f"x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s={w}x{h}:fps={fps}"
                 )
                 cmd_clip = [
-                    "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.3f}",
+                    "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.4f}",
                     "-i", img_path, "-vf", vf_zoom,
                     "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                    "-t", f"{dur_escena:.3f}", str(clip_path)
+                    "-t", f"{dur_escena:.4f}", str(clip_path)
                 ]
                 ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_clip)
                 if ok and clip_path.exists():
@@ -1414,21 +1414,29 @@ Responde SOLO JSON:
     # UTILIDADES
     # ================================================================
     def _obtener_duracion(self, ruta_video: str) -> float:
-        """Obtener duración real usando ffprobe"""
+        """Obtener duración real usando ffprobe o ffmpeg"""
         import subprocess
         try:
-            ffprobe_path = "ffprobe"
-            # Probar en PATH primero
-            proc = subprocess.run(
-                [ffprobe_path, "-v", "quiet", "-print_format", "json",
-                 "-show_format", ruta_video],
+            # 1. ffprobe
+            result = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", ruta_video],
                 capture_output=True, text=True, timeout=10
             )
-            if proc.returncode == 0:
-                data = json.loads(proc.stdout)
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
                 return round(float(data.get("format", {}).get("duration", 0)), 2)
         except Exception:
             pass
+
+        try:
+            # 2. ffmpeg fallback
+            result = subprocess.run(["ffmpeg", "-i", ruta_video], capture_output=True, text=True, timeout=10)
+            import re
+            m = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", result.stderr)
+            if m:
+                return int(m.group(1))*3600 + int(m.group(2))*60 + float(m.group(3))
+        except: pass
+        return 0.0
 
         # Fallback: ruta directa
         try:
@@ -1447,8 +1455,9 @@ Responde SOLO JSON:
         return 0.0
 
     def _obtener_duracion_audio(self, ruta_audio: str) -> float:
-        """Obtener duración del audio usando ffprobe con fallback de tamaño de archivo"""
+        """Obtener duración del audio usando Triple Sensor (ffprobe, ffmpeg y matemática robusta)"""
         import subprocess
+        # 1. Sensor Maestro: ffprobe
         for p in ["ffprobe", r"C:\ffmpeg\bin\ffprobe.exe"]:
             try:
                 result = subprocess.run(
@@ -1460,19 +1469,54 @@ Responde SOLO JSON:
                     return round(float(result.stdout.strip()), 2)
             except Exception:
                 continue
-                
-        # Si ffprobe falla totalmente, usamos un cálculo matemático robusto (salvavidas real)
-        print("[AUDIO] ffprobe falló al leer duración. Usando fallback matemático.")
+        
+        # 2. Sensor de Respaldo: ffmpeg "listener"
         try:
-            # Asumimos que el MP3 está a 128kbps (aprox 16000 bytes por segundo)
+            result = subprocess.run(["ffmpeg", "-i", ruta_audio], capture_output=True, text=True, timeout=10)
+            import re
+            match = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", result.stderr)
+            if match:
+                h, m, s = match.groups()
+                dur = int(h)*3600 + int(m)*60 + float(s)
+                if dur > 0: return round(dur, 2)
+        except Exception:
+            pass
+                
+        # 3. Sensor de Emergencia: Matemática de bytes (Asumimos 64kbps que es común en TTS)
+        print("[AUDIO] Sensores fallaron. Usando matemática de 64kbps.")
+        try:
+            # 64 kbps = 8000 bytes por segundo
             size_bytes = Path(ruta_audio).stat().st_size
-            dur = size_bytes / 16000.0
-            if dur > 0: 
-                return round(dur, 2)
+            dur = size_bytes / 8000.0
+            if dur > 0: return round(dur, 2)
         except Exception:
             pass
             
         return 30.0
+
+    async def _optimizar_prompt_imagen(self, prompt_visual: str) -> str:
+        """Usa Groq para traducir y dar estilo cinematográfico al prompt"""
+        try:
+            from app.config import GROQ_API_KEY
+            if not GROQ_API_KEY: return prompt_visual
+            import groq
+            client_groq = groq.AsyncGroq(api_key=GROQ_API_KEY)
+            
+            sys_msg = (
+                "You are a professional cinematic prompt engineer. "
+                "Translate the user description to English and expand it with technical keywords for AI image generation (Flux model). "
+                "Add details like 'cinematic lighting', 'photorealistic', '8k', 'high resolution'. "
+                "Output ONLY the optimized prompt in English. No conversation."
+            )
+            resp = await client_groq.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt_visual}],
+                temperature=0.7, max_tokens=150
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[IMAGENES] Error optimizando prompt: {e}")
+            return prompt_visual
 
     def _formatear_tamano(self, bytes: int) -> str:
         if bytes < 1024:
