@@ -7,7 +7,7 @@ echo "========================================="
 
 # 1. Actualizar sistema y paquetes básicos
 echo "-> Actualizando paquetes del sistema..."
-sudo apt update && sudo apt upgrade -y
+sudo apt update
 sudo apt install -y python3-pip python3-venv git ffmpeg sqlite3 nginx curl
 
 # 2. Configurar memoria Swap (4GB) para que FFmpeg no crashee
