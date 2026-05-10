@@ -1140,14 +1140,19 @@ Responde SOLO JSON:
                 if dur_total <= 0: dur_total = 10.0
             
             # --- Lógica de tiempos proporcionales para sincronizar subtítulos ---
-            total_chars_todas = sum(len(texto.strip()) for _, texto in imagenes)
-            if total_chars_todas == 0:
-                total_chars_todas = 1
-            duraciones_escenas = []
+            # Si una escena no tiene texto, le damos un peso equivalente a 15 caracteres
+            pesos_escenas = []
             for _, texto in imagenes:
                 chars_escena = len(texto.strip())
-                # Asignar tiempo proporcional, pero mínimo 2.5 segundos por escena
-                dur = max(2.5, (chars_escena / total_chars_todas) * dur_total)
+                peso = chars_escena if chars_escena > 0 else 15
+                pesos_escenas.append(peso)
+                
+            total_peso = sum(pesos_escenas)
+            if total_peso == 0: total_peso = 1
+            
+            duraciones_escenas = []
+            for peso in pesos_escenas:
+                dur = (peso / total_peso) * dur_total
                 duraciones_escenas.append(dur)
             
             # Mapa de resoluciones
@@ -1188,14 +1193,13 @@ Responde SOLO JSON:
                     zoom_expr = "zoom+0.0006"
                 else:
                     # Zoom Out suave (no bajar de 1.0)
-                    zoom_expr = "max(1.001, if(eq(on,1),1.05,zoom-0.0006))"
+                    zoom_expr = "if(eq(on,1),1.05,max(1.001,zoom-0.0006))"
                 
                 vf_zoom = (
-                    f"scale={sw}:{sh}:force_original_aspect_ratio=fill,"
+                    f"scale={sw}:{sh}:force_original_aspect_ratio=increase,"
                     f"crop={sw}:{sh},"
                     f"zoompan=z='{zoom_expr}':d={d_frames}:"
-                    f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps={fps},"
-                    f"scale={w}:{h}"
+                    f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps={fps}"
                 )
                 cmd_clip = [
                     "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.3f}",

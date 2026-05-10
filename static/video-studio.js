@@ -871,7 +871,7 @@ async function renderStoryboard(proyectoId) {
                 <div class="sc-header">
                     <span>🎬 Escena ${escena.numero}</span>
                 </div>
-                <div class="sc-image-wrap" style="aspect-ratio: ${ratio.replace(':', '/')};">
+                <div class="sc-image-wrap" style="aspect-ratio: ${ratio.replace(':', '/')};" onclick="window.open('${imgUrl}', '_blank')">
                     <img id="img-escena-${escena.numero}" src="${imgUrl}" 
                          onerror="this.src='https://via.placeholder.com/400x700?text=Error+al+cargar+imagen'"
                          loading="lazy">
