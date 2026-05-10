@@ -211,9 +211,9 @@
                 </div>
             </main>
 
-            <!-- Columna Derecha: Biblioteca -->
-            <aside class="studio-gallery">
-                <h3 onclick="toggleSeccionGaleria('gallery-tabs')"><span>📚 Biblioteca</span> <span class="toggle-arrow">▾</span></h3>
+            <!-- Columna Derecha: Biblioteca (Oculta por defecto) -->
+            <aside id="studioGalleryPanel" class="studio-gallery collapsed">
+                <h3 onclick="document.getElementById('studioGalleryPanel').classList.toggle('collapsed')"><span>📚 Biblioteca</span> <span class="toggle-arrow">▾</span></h3>
                 
                 <div class="gallery-tabs" id="gallery-tabs">
                     <div class="gallery-section">

@@ -2118,13 +2118,14 @@ textarea::placeholder {
 
 .studio-layout {
     flex: 1;
-    display: grid;
-    grid-template-columns: 360px 1fr 320px;
+    display: flex;
     gap: 0;
     overflow: hidden;
 }
 
 .studio-sidebar {
+    width: 360px;
+    flex-shrink: 0;
     background: #111118;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     padding: 25px;
@@ -2132,20 +2133,47 @@ textarea::placeholder {
 }
 
 .studio-main {
+    flex: 1;
+    min-width: 0;
     background: #09090b;
     padding: 30px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch; /* Stretch para que ocupe todo el ancho */
     gap: 25px;
 }
 
 .studio-gallery {
+    width: 320px;
+    flex-shrink: 0;
     background: #111118;
     border-left: 1px solid rgba(255, 255, 255, 0.05);
     padding: 20px;
     overflow-y: auto;
+    transition: width 0.3s ease, padding 0.3s ease;
+}
+
+.studio-gallery.collapsed {
+    width: 60px;
+    padding: 20px 10px;
+    cursor: pointer;
+}
+
+.studio-gallery.collapsed .gallery-tabs,
+.studio-gallery.collapsed .gallery-stats,
+.studio-gallery.collapsed h3 span:not(.toggle-arrow) {
+    display: none;
+}
+
+.studio-gallery.collapsed h3 {
+    text-align: center;
+    padding: 10px 0;
+}
+
+.studio-gallery.collapsed h3 .toggle-arrow {
+    transform: rotate(90deg);
+    display: inline-block;
 }
 
 /* Scrollbars elegantes */

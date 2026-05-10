@@ -1,11 +1,12 @@
 /* PANEL DE STORYBOARD VERTICAL PROFESIONAL (ESTILO CAPCUT/ADOBE) */
 .studio-content-layout {
     display: flex;
+    flex-direction: column;
     gap: 0;
     align-items: stretch;
     justify-content: flex-start;
     width: 100%;
-    height: calc(100vh - 120px); /* Ocupar todo el alto disponible */
+    height: calc(100vh - 120px);
     margin-top: 10px;
     background: #09090b;
     border-radius: 12px;
@@ -17,33 +18,32 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 30px;
+    padding: 20px;
     background: #050507;
-    min-width: 0;
+    min-height: 40%;
     overflow-y: auto;
 }
 
 .storyboard-vertical-sidebar {
-    width: 420px; /* Ancho real para que no sea una rayita */
-    min-width: 380px;
+    height: 350px; /* Panel inferior */
+    width: 100%;
     flex-shrink: 0;
-    background: #111116;
-    border-left: 1px solid #333;
+    background: #e5e7eb; /* Color claro para la zona de imágenes */
+    border-top: 2px solid #5E6AD2; /* Línea espaciadora superior elegante */
     display: flex;
     flex-direction: column;
-    height: 100%;
-    animation: panelSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: panelSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes panelSlideIn {
-    from { width: 0; opacity: 0; }
-    to { width: 420px; opacity: 1; }
+@keyframes panelSlideUp {
+    from { height: 0; opacity: 0; }
+    to { height: 350px; opacity: 1; }
 }
 
 .sc-sidebar-header {
-    padding: 20px;
-    background: #1a1a24;
-    border-bottom: 1px solid #333;
+    padding: 15px 20px;
+    background: #f3f4f6;
+    border-bottom: 1px solid #d1d5db;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -51,52 +51,68 @@
 
 .sc-sidebar-header h3 {
     margin: 0;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 800;
-    color: var(--primary-color);
+    color: #1f2937;
     letter-spacing: 0.5px;
 }
 
 .storyboard-grid-vertical {
     display: flex;
-    flex-direction: column;
-    gap: 25px;
+    flex-direction: row; /* Horizontal */
+    gap: 20px;
     padding: 20px;
-    overflow-y: auto;
+    overflow-x: auto; /* Scroll horizontal */
+    overflow-y: hidden;
     height: 100%;
+    align-items: flex-start;
     scrollbar-width: thin;
-    scrollbar-color: var(--primary-color) #111;
+    scrollbar-color: var(--primary-color) #e5e7eb;
 }
 
-/* Tarjetas optimizadas para el panel vertical */
+/* Tarjetas optimizadas para el panel horizontal */
 .storyboard-card-new {
-    width: 100%;
-    background: #1a1a1f;
-    border-radius: 14px;
-    border: 1px solid #2a2a2f;
+    width: 250px;
+    flex-shrink: 0;
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
     overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
 }
 
 .sc-image-wrap {
     width: 100%;
-    background: #000;
+    height: 140px;
+    background: #f9fafb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .sc-image-wrap img {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
     display: block;
 }
 
 .sc-content {
-    padding: 15px;
+    padding: 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 .sc-narration {
-    font-size: 0.85rem;
-    color: #eee;
-    margin-bottom: 12px;
+    font-size: 0.8rem;
+    color: #4b5563;
+    margin-bottom: 8px;
+    max-height: 40px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sc-prompt-box textarea {
