@@ -388,8 +388,10 @@ async function crearVideoDesdeStudio() {
                     progresoEstado.innerHTML = `✅ ¡Imágenes listas! Entrando al Editor de Storyboard...`;
                     
                     setTimeout(() => {
-                        progresoDiv.style.display = 'none';
-                        renderStoryboard(proyectoActual); // Abre el editor tipo CapCut
+                        // En lugar de ocultar el progreso y esperar, abrimos el storyboard
+                        // y disparamos la segunda fase automáticamente.
+                        renderStoryboard(proyectoActual); 
+                        ensamblarVideoFinal();
                     }, 1000);
                 }
 
