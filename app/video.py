@@ -283,7 +283,7 @@ Tu trabajo:
 
 Para cada escena debes definir:
 - texto_narracion: Lo que dice el narrador (poderoso, conciso)
-- descripcion_visual: Qué se ve en pantalla (detallado, cinematográfico)
+- descripcion_visual: Qué se ve en pantalla (MANTÉN ESTRICTA COHERENCIA VISUAL Y NARRATIVA con el TEMA ORIGINAL: "{proyecto.tema}" y la DESCRIPCIÓN ORIGINAL: "{proyecto.prompt}". TODAS las imágenes deben parecer del mismo video).
 - angulo_camara: Plano general, primer plano, picado, contrapicado, etc.
 - iluminacion: Dramática, natural, contraluz, dorada, etc.
 - paleta_colores: Fría, cálida, neutra, alto contraste, etc.
@@ -463,10 +463,12 @@ ESCENA ANTERIOR (que no gustó):
 
 RAZÓN DEL CAMBIO: {razon}
 
-Crea una versión MEJOR y DIFERENTE manteniendo coherencia con:
-- Tema: {proyecto.tema}
+Crea una versión MEJOR y DIFERENTE manteniendo ESTRICTA COHERENCIA con el documento original:
+- Tema Original: {proyecto.tema}
+- Descripción Original: {proyecto.prompt}
 - Tono: {proyecto.analisis.get('tono_general', '')}
 - Estilo: {proyecto.analisis.get('estilo_visual', '')}
+(Las imágenes deben seguir exactamente la línea del documento original, solo ajustando lo que pide la razón del cambio)
 
 Responde SOLO JSON:
 {{
@@ -1147,7 +1149,16 @@ Responde SOLO JSON:
                 dur_total = self._obtener_duracion_audio(audio_path)
                 if dur_total <= 0: dur_total = 10.0
             
-            dur_escena = max(3.0, dur_total / max(len(imagenes), 1))
+            # --- Lógica de tiempos proporcionales para sincronizar subtítulos ---
+            total_chars_todas = sum(len(texto.strip()) for _, texto in imagenes)
+            if total_chars_todas == 0:
+                total_chars_todas = 1
+            duraciones_escenas = []
+            for _, texto in imagenes:
+                chars_escena = len(texto.strip())
+                # Asignar tiempo proporcional, pero mínimo 2.5 segundos por escena
+                dur = max(2.5, (chars_escena / total_chars_todas) * dur_total)
+                duraciones_escenas.append(dur)
             
             # Mapa de resoluciones
             res_map = {
@@ -1172,19 +1183,22 @@ Responde SOLO JSON:
 
             # ── PASO 1: clip por escena con Ken Burns ─────────────────
             clips = []
-            sw = int(w * 1.15); sw = sw if sw % 2 == 0 else sw + 1
-            sh = int(h * 1.15); sh = sh if sh % 2 == 0 else sh + 1
-            d_frames = int(dur_escena * fps)
+            # Reducir zoom inicial a 1.05 (5% de recorte) para evitar mucho acercamiento
+            sw = int(w * 1.05); sw = sw if sw % 2 == 0 else sw + 1
+            sh = int(h * 1.05); sh = sh if sh % 2 == 0 else sh + 1
 
             for i, (img_path, _) in enumerate(imagenes):
+                dur_escena = duraciones_escenas[i]
+                d_frames = int(dur_escena * fps)
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
-                # Zoom más agresivo y dinámico (i%2 para alternar in/out)
+                
+                # Zoom sutil (paneo más lento, 0.0006)
                 if i % 2 == 0:
-                    # Zoom In suave: empieza en 1.0 y sube
-                    zoom_expr = "zoom+0.0012"
+                    # Zoom In suave
+                    zoom_expr = "zoom+0.0006"
                 else:
-                    # Zoom Out: empieza en 1.15 y baja
-                    zoom_expr = "if(eq(on,1),1.15,zoom-0.0012)"
+                    # Zoom Out suave
+                    zoom_expr = "if(eq(on,1),1.05,zoom-0.0006)"
                 
                 vf_zoom = (
                     f"scale={sw}:{sh}:force_original_aspect_ratio=fill,"
@@ -1233,7 +1247,7 @@ Responde SOLO JSON:
 
             # ── PASO 3: SRT sincronizado ──────────────────────────────
             srt_path = work_dir / "subtitulos.srt"
-            srt_path.write_text(self._generar_srt(imagenes, dur_escena), encoding="utf-8")
+            srt_path.write_text(self._generar_srt(imagenes, duraciones_escenas), encoding="utf-8")
 
             # ── PASO 4: audio + subtítulos ────────────────────────────
             # Tamaño profesional: ~3.5% del alto en horizontal, un poco menos en vertical
@@ -1292,16 +1306,20 @@ Responde SOLO JSON:
             import traceback; traceback.print_exc()
             return None
 
-    def _generar_srt(self, imagenes: list, dur_escena: float) -> str:
+    def _generar_srt(self, imagenes: list, duraciones_escenas: list) -> str:
         """SRT con timing proporcional a caracteres — sincronizado con el audio"""
         lines = []
         idx = 1
         chars_por_linea = 36
+        scene_start = 0.0
 
         for i, (_, texto) in enumerate(imagenes):
             texto = (texto or "").strip()
-            if not texto: continue
-            scene_start = i * dur_escena
+            dur_escena = duraciones_escenas[i]
+            
+            if not texto: 
+                scene_start += dur_escena
+                continue
 
             # Trocear en líneas de max 36 chars
             words = texto.split()
@@ -1317,10 +1335,13 @@ Responde SOLO JSON:
             total_chars = sum(len(c) for c in chunks) or 1
             t = scene_start
             for chunk in chunks:
-                dur_chunk = max(1.2, min(3.5, dur_escena * len(chunk) / total_chars))
-                t_end = min(t + dur_chunk - 0.1, scene_start + dur_escena - 0.05)
+                dur_chunk = dur_escena * (len(chunk) / total_chars)
+                t_end = t + dur_chunk - 0.05
                 lines += [str(idx), f"{self._fmt_srt(t)} --> {self._fmt_srt(t_end)}", chunk, ""]
-                idx += 1; t += dur_chunk
+                idx += 1
+                t += dur_chunk
+            
+            scene_start += dur_escena
 
         return "\n".join(lines)
 

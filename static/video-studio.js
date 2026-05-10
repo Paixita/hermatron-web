@@ -999,8 +999,8 @@ async function ensamblarVideoFinal() {
     const res = document.getElementById('exportResolution').value;
     showToast(`🎬 Renderizando video en ${res}p...`, 'info');
     
-    // Ocultar Storyboard y mostrar progreso final
-    document.getElementById('storyboardContainer').style.display = 'none';
+    // Mostrar progreso final sin ocultar Storyboard
+    // document.getElementById('storyboardContainer').style.display = 'none';
     
     const progresoDiv = document.getElementById('studioProgreso');
     const progresoFill = document.getElementById('progresoFill');
