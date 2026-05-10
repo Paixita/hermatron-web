@@ -797,6 +797,9 @@ Responde SOLO JSON:
         import urllib.parse
         import random
 
+        # Limpieza inicial del prompt
+        query_limpio = query[:1000].replace("\n", " ").replace('"', "").strip()
+
         # ── OPTIMIZACIÓN DE PROMPT (Director de Arte IA) ──
         query_opt = await self._optimizar_prompt_imagen(query_limpio)
         query_cod = urllib.parse.quote(query_opt)
