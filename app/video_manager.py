@@ -64,10 +64,9 @@ def pre_producir_video_task(payload: Dict[str, Any]):
         generador_video._actualizar_estado(proyecto_id, VideoEstado.ERROR, str(e))
         raise e
 
-def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt: Optional[str] = None, cantidad: int = 1):
+async def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt: Optional[str] = None, cantidad: int = 1):
     """Regenera la imagen de una escena específica (permite generar múltiples opciones)."""
     try:
-        # self.update_state(state="REGENERANDO_IMAGEN", meta={"progreso": 20})
         opciones = []
         
         proj_obj = generador_video._cargar_proyecto(proyecto_id)
@@ -85,10 +84,10 @@ def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt: Optio
             # Mover a ruta de alternativa (alt_1, alt_2...)
             alt_path = escena_dir / f"imagen_alt_{i+1}.png"
             # Generar imagen directamente con Pollinations respetando formato
-            exito = run_async(generador_video._generar_imagen_pollinations(prompt_final, str(alt_path), width, height))
+            exito = await generador_video._generar_imagen_pollinations(prompt_final, str(alt_path), width, height)
             
             if not exito:
-                run_async(generador_video._generar_imagen_placeholder(str(alt_path), prompt_final))
+                await generador_video._generar_imagen_placeholder(str(alt_path), prompt_final)
                 
             opciones.append(str(alt_path))
             

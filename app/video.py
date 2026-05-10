@@ -797,13 +797,14 @@ Responde SOLO JSON:
         import urllib.parse
         import random
 
-        query_limpio = query[:200].replace("\n", " ").replace('"', "").strip()
+        # Limitamos a 1000 caracteres para no romper la URL, pero evitamos cortar la idea principal
+        query_limpio = query[:1000].replace("\n", " ").replace('"', "").strip()
 
         # ── FUENTE 1: Pollinations.ai (IA Generativa Principal) ──
         # Respetar el width y height para 16:9 o 9:16
         gen_w, gen_h = width, height
         seed = random.randint(1, 99999)
-        query_cod = urllib.parse.quote(query_limpio[:150])
+        query_cod = urllib.parse.quote(query_limpio)
         url_poll = (
             f"https://image.pollinations.ai/prompt/{query_cod}"
             f"?width={gen_w}&height={gen_h}&nologo=true&seed={seed}&model=flux"
@@ -1186,8 +1187,8 @@ Responde SOLO JSON:
                     # Zoom In suave
                     zoom_expr = "zoom+0.0006"
                 else:
-                    # Zoom Out suave
-                    zoom_expr = "if(eq(on,1),1.05,zoom-0.0006)"
+                    # Zoom Out suave (no bajar de 1.0)
+                    zoom_expr = "max(1.001, if(eq(on,1),1.05,zoom-0.0006))"
                 
                 vf_zoom = (
                     f"scale={sw}:{sh}:force_original_aspect_ratio=fill,"
@@ -1299,7 +1300,9 @@ Responde SOLO JSON:
         """SRT con timing proporcional a caracteres — sincronizado con el audio"""
         lines = []
         idx = 1
-        chars_por_linea = 36
+        # Menos palabras por línea en vertical para no salir, más palabras en horizontal para más tiempo en pantalla
+        proj_obj = self._cargar_proyecto(str(Path(imagenes[0][0]).parent.parent.name)) if imagenes else None
+        chars_por_linea = 36 if (proj_obj and "9:16" in str(proj_obj.tema)) else 70
         scene_start = 0.0
 
         for i, (_, texto) in enumerate(imagenes):

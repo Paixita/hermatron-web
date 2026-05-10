@@ -1061,7 +1061,7 @@ class RegenerarImagenRequest(BaseModel):
 @app.post("/api/video/regenerar-imagen")
 async def regenerar_imagen_endpoint(req: RegenerarImagenRequest):
     try:
-        resultado = regenerar_imagen_task(req.proyecto_id, req.escena_num, req.prompt_visual, req.cantidad)
+        resultado = await regenerar_imagen_task(req.proyecto_id, req.escena_num, req.prompt_visual, req.cantidad)
         return {"success": True, "result": resultado}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
