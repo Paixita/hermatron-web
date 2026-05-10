@@ -1498,28 +1498,39 @@ Responde SOLO JSON:
         return 30.0
 
     async def _optimizar_prompt_imagen(self, prompt_visual: str) -> str:
-        """Usa Groq para traducir y dar estilo cinematográfico al prompt"""
+        """Usa Groq para traducir y dar estilo cinematográfico al prompt (con timeout estricto)"""
         try:
             from app.config import GROQ_API_KEY
             if not GROQ_API_KEY: return prompt_visual
+            
             import groq
-            client_groq = groq.AsyncGroq(api_key=GROQ_API_KEY)
+            # Reutilizar cliente si es posible o crearlo con timeout
+            client_groq = groq.AsyncGroq(api_key=GROQ_API_KEY, timeout=10.0)
             
             sys_msg = (
                 "You are a professional cinematic prompt engineer. "
-                "Translate the user description to English and expand it with technical keywords for AI image generation (Flux model). "
-                "Add details like 'cinematic lighting', 'photorealistic', '8k', 'high resolution'. "
-                "Output ONLY the optimized prompt in English. No conversation."
+                "Translate to English and expand with technical keywords (Flux/Stable Diffusion). "
+                "Style: Cinematic, 8k, hyper-realistic, high resolution. "
+                "Output ONLY the optimized prompt in English."
             )
-            resp = await client_groq.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt_visual}],
-                temperature=0.7, max_tokens=150
+            
+            # Timeout de 10 segundos para no bloquear todo el pipeline
+            resp = await asyncio.wait_for(
+                client_groq.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt_visual}],
+                    temperature=0.7, max_tokens=100
+                ),
+                timeout=12.0
             )
-            return resp.choices[0].message.content.strip()
+            optimized = resp.choices[0].message.content.strip()
+            # Limpiar posibles comillas o basura
+            optimized = optimized.replace('"', '').replace('\n', ' ').strip()
+            return optimized
         except Exception as e:
-            print(f"[IMAGENES] Error optimizando prompt: {e}")
-            return prompt_visual
+            print(f"[IMAGENES] Salto de optimización por lentitud/error: {e}")
+            # Limpieza básica manual si falla la IA
+            return prompt_visual.replace("\n", " ").strip()
 
     def _formatear_tamano(self, bytes: int) -> str:
         if bytes < 1024:
