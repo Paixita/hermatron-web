@@ -799,20 +799,9 @@ Responde SOLO JSON:
 
         query_limpio = query[:200].replace("\n", " ").replace('"', "").strip()
 
-        # ── FUENTE 1: Pexels (la más rápida si hay key) ──────────────
-        if PEXELS_API_KEY:
-            try:
-                print(f"[IMAGENES] Pexels: {query_limpio[:50]}...")
-                ok = await self._buscar_imagen_pexels(query_limpio, ruta_salida)
-                if ok:
-                    print("[IMAGENES] Pexels OK")
-                    return True
-            except Exception as e:
-                print(f"[IMAGENES] Pexels error: {e}")
-
-        # ── FUENTE 2: Pollinations.ai — resolución reducida para velocidad ──
-        # Usamos 1280x720 para generar (se escala después en FFmpeg)
-        gen_w, gen_h = 1280, 720
+        # ── FUENTE 1: Pollinations.ai (IA Generativa Principal) ──
+        # Respetar el width y height para 16:9 o 9:16
+        gen_w, gen_h = width, height
         seed = random.randint(1, 99999)
         query_cod = urllib.parse.quote(query_limpio[:150])
         url_poll = (
@@ -1250,8 +1239,8 @@ Responde SOLO JSON:
             srt_path.write_text(self._generar_srt(imagenes, duraciones_escenas), encoding="utf-8")
 
             # ── PASO 4: audio + subtítulos ────────────────────────────
-            # Tamaño profesional: ~3.5% del alto en horizontal, un poco menos en vertical
-            font_size = max(20, int(h * 0.038)) if h < w else max(24, int(h * 0.024))
+            # Tamaño profesional fijo (libass usa PlayResY base)
+            font_size = 22 if h < w else 24
             srt_esc = str(srt_path).replace("\\", "/")
             if os.name == "nt":
                 srt_esc = srt_esc.replace(":", "\\:")

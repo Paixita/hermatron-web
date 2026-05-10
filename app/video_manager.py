@@ -78,14 +78,18 @@ def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt: Optio
         escena_dir = Path(generador_video._get_proyecto_dir(proyecto_id)) / f"escena_{escena_num}"
         escena_dir.mkdir(parents=True, exist_ok=True)
         
+        width, height = generador_video._get_resolucion_from_tema(proj_obj.tema)
+        
         import shutil
         for i in range(cantidad):
-            # Generar imagen directamente
-            ruta_tmp = generador_video.vision_engine.generar_imagen(prompt_final, w=1920, h=1080)
-            
             # Mover a ruta de alternativa (alt_1, alt_2...)
             alt_path = escena_dir / f"imagen_alt_{i+1}.png"
-            shutil.move(ruta_tmp, alt_path)
+            # Generar imagen directamente con Pollinations respetando formato
+            exito = run_async(generador_video._generar_imagen_pollinations(prompt_final, str(alt_path), width, height))
+            
+            if not exito:
+                run_async(generador_video._generar_imagen_placeholder(str(alt_path), prompt_final))
+                
             opciones.append(str(alt_path))
             
         return {"success": True, "opciones": opciones}
