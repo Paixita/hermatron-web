@@ -924,44 +924,30 @@ async function regenerarImagenOpciones(proyectoId, escenaNum) {
         });
         const data = await response.json();
         
-        if (data.success && data.task_id) {
-            // Polling para esperar las imágenes
-            const poll = setInterval(async () => {
-                try {
-                    const st = await fetch(`/api/video/celery-status/${data.task_id}`);
-                    const statusData = await st.json();
-                    
-                    if (statusData.status === 'SUCCESS' && statusData.result) {
-                        clearInterval(poll);
-                        const opciones = statusData.result.opciones;
-                        
-                        alternativasDiv.style.display = 'flex';
-                        opciones.forEach((opt, i) => {
-                            // Convertir ruta absoluta a URL relativa
-                            let relPath = opt.split('videos')[1].replace(/\\/g, '/');
-                            const imgUrl = '/video_files' + relPath;
-                            
-                            const optDiv = document.createElement('div');
-                            optDiv.style.cssText = 'flex: 1; cursor: pointer; border: 2px solid #333; border-radius: 8px; overflow: hidden; transition: all 0.2s; position: relative;';
-                            optDiv.innerHTML = `
-                                <img src="${imgUrl}" style="width: 100%; aspect-ratio: 16/9; object-fit: cover;">
-                                <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.8); color: #fff; font-size: 0.7rem; text-align: center; padding: 5px;">Opción ${i+1}</div>
-                            `;
-                            optDiv.onclick = () => seleccionarAlternativa(proyectoId, escenaNum, opt);
-                            alternativasDiv.appendChild(optDiv);
-                        });
-                        
-                        if (overlay) overlay.style.display = 'none';
-                        showToast('🎨 ¡Opciones listas!', 'success');
-                    } else if (statusData.status === 'FAILURE') {
-                        clearInterval(poll);
-                        if (overlay) overlay.style.display = 'none';
-                        showToast('❌ Error generando alternativas', 'error');
-                    }
-                } catch (e) {
-                    console.error("Error polling image task:", e);
-                }
-            }, 2000);
+        if (data.success && data.result) {
+            const opciones = data.result.opciones;
+            
+            alternativasDiv.style.display = 'flex';
+            opciones.forEach((opt, i) => {
+                // Convertir ruta absoluta a URL relativa
+                let relPath = opt.split('videos')[1].replace(/\\/g, '/');
+                const imgUrl = '/video_files' + relPath;
+                
+                const optDiv = document.createElement('div');
+                optDiv.style.cssText = 'flex: 1; cursor: pointer; border: 2px solid #333; border-radius: 8px; overflow: hidden; transition: all 0.2s; position: relative;';
+                optDiv.innerHTML = `
+                    <img src="${imgUrl}" style="width: 100%; aspect-ratio: 16/9; object-fit: cover;">
+                    <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.8); color: #fff; font-size: 0.7rem; text-align: center; padding: 5px;">Opción ${i+1}</div>
+                `;
+                optDiv.onclick = () => seleccionarAlternativa(proyectoId, escenaNum, opt);
+                alternativasDiv.appendChild(optDiv);
+            });
+            
+            if (overlay) overlay.style.display = 'none';
+            showToast('🎨 ¡Opciones listas!', 'success');
+        } else {
+            if (overlay) overlay.style.display = 'none';
+            showToast('❌ Error generando alternativas', 'error');
         }
     } catch (e) {
         console.error(e);

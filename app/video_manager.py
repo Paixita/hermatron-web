@@ -70,23 +70,24 @@ def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt: Optio
         # self.update_state(state="REGENERANDO_IMAGEN", meta={"progreso": 20})
         opciones = []
         
-        # Si cantidad > 1, generamos archivos temporales distintos
+        proj_obj = generador_video._cargar_proyecto(proyecto_id)
+        escena_info = next((e for e in proj_obj.escenas_disenadas if e["numero"] == escena_num), None)
+        prompt_visual = nuevo_prompt or (escena_info["descripcion_visual"] if escena_info else "Cinematic scene")
+        prompt_final = f"{proj_obj.estilo_visual}. {prompt_visual}"
+        
+        escena_dir = Path(generador_video._get_proyecto_dir(proyecto_id)) / f"escena_{escena_num}"
+        escena_dir.mkdir(parents=True, exist_ok=True)
+        
+        import shutil
         for i in range(cantidad):
-            suffix = f"_alt_{i}" if i > 0 else ""
-            ruta = run_async(generador_video.regenerar_imagen_escena(proyecto_id, escena_num, nuevo_prompt))
+            # Generar imagen directamente
+            ruta_tmp = generador_video.vision_engine.generar_imagen(prompt_final, w=1920, h=1080)
             
-            if i > 0:
-                p = Path(ruta)
-                alt_path = p.parent / f"imagen_alt_{i}.png"
-                import shutil
-                shutil.copy2(p, alt_path)
-                opciones.append(str(alt_path))
-            else:
-                opciones.append(ruta)
+            # Mover a ruta de alternativa (alt_1, alt_2...)
+            alt_path = escena_dir / f"imagen_alt_{i+1}.png"
+            shutil.move(ruta_tmp, alt_path)
+            opciones.append(str(alt_path))
             
-            # self.update_state(state="REGENERANDO_IMAGEN", meta={"progreso": 20 + int((i+1)/cantidad * 60)})
-            
-        # self.update_state(state="COMPLETO", meta={"progreso": 100})
         return {"success": True, "opciones": opciones}
     except Exception as e:
         # self.update_state(state="ERROR", meta={"error": str(e)})
