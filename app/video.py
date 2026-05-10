@@ -1183,20 +1183,23 @@ Responde SOLO JSON:
                 d_frames = int(dur_escena * fps)
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
                 
-                # Zoom estabilizado (centrado matemático perfecto para evitar el "baile")
+                # Zoom estabilizado con OVERSAMPLING (para eliminar el "baile" / vibración)
+                # Renderizamos internamente en 2K (2560x1440) y luego bajamos a 1080p.
+                # Esto suaviza el movimiento sub-píxel.
                 if i % 2 == 0:
-                    # Zoom In estable
-                    zoom_expr = "zoom+0.0012"
+                    zoom_expr = "zoom+0.001"
                 else:
-                    # Zoom Out estable (empezar en 1.1)
-                    zoom_expr = "if(eq(on,1),1.1,max(1.001,zoom-0.0012))"
+                    zoom_expr = "if(eq(on,1),1.1,max(1.001,zoom-0.001))"
                 
-                # Usamos (iw-iw/zoom)/2 para centrado perfecto sin saltos de píxel
+                # Agregamos +5 frames de margen para que el zoom nunca se quede quieto al final
+                d_frames_safe = d_frames + 5
+                
                 vf_zoom = (
-                    f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                    f"crop={w}:{h},"
-                    f"zoompan=z='{zoom_expr}':d={d_frames}:"
-                    f"x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':s={w}x{h}:fps={fps}"
+                    f"scale=2560:1440:force_original_aspect_ratio=increase,"
+                    f"crop=2560:1440,"
+                    f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
+                    f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=2560x1440:fps={fps},"
+                    f"scale={w}:{h}"
                 )
                 cmd_clip = [
                     "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.4f}",
@@ -1270,7 +1273,7 @@ Responde SOLO JSON:
                 "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-threads", "1"
             ]
             if audio_path and Path(audio_path).exists():
-                cmd_final += ["-c:a", "aac", "-shortest"]
+                cmd_final += ["-c:a", "aac"]
             cmd_final.append(str(video_final))
 
             print("[VIDEO] Aplicando SRT + audio...")
@@ -1281,7 +1284,7 @@ Responde SOLO JSON:
                 print(f"[VIDEO] subtitles filter falló → sin subtítulos: {err[:100]}")
                 cmd_ns = ["ffmpeg", "-y", "-i", str(video_base)]
                 if audio_path and Path(audio_path).exists():
-                    cmd_ns += ["-i", str(audio_path), "-c:a", "aac", "-shortest"]
+                    cmd_ns += ["-i", str(audio_path), "-c:a", "aac"]
                 cmd_ns += ["-c:v", "copy", str(video_final)]
                 ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_ns)
 

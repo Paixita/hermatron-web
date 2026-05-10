@@ -68,33 +68,38 @@ async def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt:
     """Regenera la imagen de una escena específica (permite generar múltiples opciones)."""
     try:
         opciones = []
-        
         proj_obj = generador_video._cargar_proyecto(proyecto_id)
+        if not proj_obj:
+             return {"success": False, "error": "Proyecto no encontrado"}
+             
         escena_info = next((e for e in proj_obj.escenas_disenadas if e["numero"] == escena_num), None)
         prompt_visual = nuevo_prompt or (escena_info["descripcion_visual"] if escena_info else "Cinematic scene")
-        prompt_final = f"{proj_obj.estilo_visual}. {prompt_visual}"
+        
+        # El estilo visual ayuda a mantener la coherencia
+        estilo = getattr(proj_obj, 'estilo_visual', 'Cinematic')
+        prompt_final = f"{estilo}. {prompt_visual}"
         
         escena_dir = Path(generador_video._get_proyecto_dir(proyecto_id)) / f"escena_{escena_num}"
         escena_dir.mkdir(parents=True, exist_ok=True)
         
         width, height = generador_video._get_resolucion_from_tema(proj_obj.tema)
         
-        import shutil
         for i in range(cantidad):
-            # Mover a ruta de alternativa (alt_1, alt_2...)
             alt_path = escena_dir / f"imagen_alt_{i+1}.png"
-            # Generar imagen directamente con Pollinations respetando formato
+            # Usar la nueva lógica de optimización (Director de Arte IA)
             exito = await generador_video._generar_imagen_pollinations(prompt_final, str(alt_path), width, height)
             
             if not exito:
+                # Fallback a Picsum si falla todo
+                print(f"[REGENERAR] Pollinations falló en alt {i+1}, usando placeholder")
                 await generador_video._generar_imagen_placeholder(str(alt_path), prompt_final)
                 
             opciones.append(str(alt_path))
             
         return {"success": True, "opciones": opciones}
     except Exception as e:
-        # self.update_state(state="ERROR", meta={"error": str(e)})
-        raise e
+        print(f"[REGENERAR ERROR] {e}")
+        return {"success": False, "error": str(e)}
 
 def ensamblar_video_task(proyecto_id: str, resolucion: str = "1080"):
     """Fase 6-7: Genera voz y ensambla el video final."""
