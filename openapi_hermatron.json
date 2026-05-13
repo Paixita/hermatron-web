@@ -1,0 +1,87 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Hermatron AI Video API",
+    "description": "API para la generación automática de videos cinematográficos, búsqueda web y ejecución de código.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://TU_IP_O_DOMINIO_DE_GCP",
+      "description": "Servidor principal de Hermatron"
+    }
+  ],
+  "paths": {
+    "/api/video/crear": {
+      "post": {
+        "summary": "Crear un nuevo video",
+        "operationId": "crearVideo",
+        "description": "Inicia el proceso de creación de un video basado en un tema y un prompt descriptivo.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tema": { "type": "string", "description": "El título o tema del video." },
+                  "prompt": { "type": "string", "description": "Descripción detallada de lo que debe tratar el video." },
+                  "voz": { "type": "string", "description": "ID de la voz (ej: es-MX-JorgeNeural)." },
+                  "estilo": { "type": "string", "description": "Estilo visual (ej: cinematic, anime)." },
+                  "formato": { "type": "string", "description": "Relación de aspecto (16:9 o 9:16)." }
+                },
+                "required": ["tema", "prompt"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Video iniciado con éxito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "video_id": { "type": "string" },
+                    "estado": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/video/progreso/{video_id}": {
+      "get": {
+        "summary": "Consultar progreso del video",
+        "operationId": "consultarProgreso",
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado y progreso del video",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "progreso": { "type": "integer" },
+                    "estado": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

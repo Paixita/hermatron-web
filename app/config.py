@@ -66,6 +66,14 @@ IMAGENES_DIR.mkdir(exist_ok=True)
 #Configuración de video
 # Opciones: "1920x1080" (HD), "2560x1440" (2K), "3840x2160" (4K)
 IMAGEN_RESOLUTION = os.getenv("IMAGEN_RESOLUTION", "2560x1440")  # Default 2K para mejor calidad
+TRANSLATION_CACHE_TTL = int(os.getenv("TRANSLATION_CACHE_TTL", "86400"))   # 24 h
+MAX_IN_MEMORY_DURATION = int(os.getenv("MAX_IN_MEMORY_DURATION", "120"))  # secs
+IMAGE_RESOLUTIONS = {
+    "16:9": (1920, 1080),
+    "9:16": (1080, 1920),
+    "1080p": (1920, 1080),
+}
+TRANSLATION_CACHE_PATH = BASE_DIR / "videos" / "translation_cache.json"
 
 # Opciones adicionales
 VIDEO_FPS = int(os.getenv("VIDEO_FPS", "30"))

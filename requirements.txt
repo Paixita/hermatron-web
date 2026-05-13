@@ -30,5 +30,6 @@ psutil>=5.9.0
 # Generación de Video
 Pillow          # Generar imágenes/thumbnails
 # Nota: moviepy ha sido eliminado para optimizar memoria en Render (se usa FFmpeg nativo)
+google-cloud-translate>=3.0.0
 
 

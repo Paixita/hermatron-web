@@ -871,10 +871,14 @@ async function renderStoryboard(proyectoId) {
                 <div class="sc-header">
                     <span>🎬 Escena ${escena.numero}</span>
                 </div>
-                <div class="sc-image-wrap" style="aspect-ratio: ${ratio.replace(':', '/')};" onclick="window.open('${imgUrl}', '_blank')">
+                <div class="sc-image-wrap" style="aspect-ratio: ${ratio.replace(':', '/')};">
                     <img id="img-escena-${escena.numero}" src="${imgUrl}" 
+                         onclick="window.open('${imgUrl}', '_blank')"
                          onerror="this.src='https://via.placeholder.com/400x700?text=Error+al+cargar+imagen'"
                          loading="lazy">
+                    <button class="btn-regenerar-mini" title="Regenerar esta imagen" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">
+                        🔄
+                    </button>
                     <div id="overlay-escena-${escena.numero}" class="sc-overlay">
                         <div class="spinner-small"></div>
                         <span>Generando...</span>
@@ -884,17 +888,13 @@ async function renderStoryboard(proyectoId) {
                 <div class="sc-content">
                     <p class="sc-narration">${escena.texto_narracion || ''}</p>
                     <div class="sc-prompt-box">
-                        <label>Descripción Visual (AI Prompt)</label>
+                        <label>AI Art Prompt</label>
                         <textarea id="prompt-escena-${escena.numero}">${escena.descripcion_visual || ''}</textarea>
-                    </div>
-                    <div class="sc-actions">
-                        <button class="btn btn-secondary btn-block" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">
-                            🔄 Probar alternativas
-                        </button>
                     </div>
                 </div>
                 <div id="alternativas-${escena.numero}" class="sc-alternativas"></div>
             `;
+            grid.appendChild(card);
             grid.appendChild(card);
         });
     } catch (e) {
@@ -1024,13 +1024,13 @@ async function ensamblarVideoFinal() {
                 progresoPorcentaje.textContent = pct + '%';
                 
                 // Mensajes de fase final CapCut Style
-                if (pct < 40) {
+                if (pct < 35) {
                     progresoEstado.innerHTML = '🎙️ <strong>Creando la voz superpuesta...</strong>';
                     progresoFill.style.background = '#fd7e14';
-                } else if (pct < 70) {
+                } else if (pct < 65) {
                     progresoEstado.innerHTML = '📝 <strong>Creando subtítulos...</strong>';
                     progresoFill.style.background = '#17a2b8';
-                } else if (pct < 95) {
+                } else {
                     progresoEstado.innerHTML = '🎞️ <strong>Creando el video...</strong>';
                     progresoFill.style.background = '#2ea043';
                 }

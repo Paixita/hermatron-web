@@ -16,7 +16,13 @@ from typing import Optional
 from dataclasses import dataclass, asdict, field
 from enum import Enum
 
-from app.config import BASE_DIR, PEXELS_API_KEY, ELEVENLABS_API_KEY, UNSPLASH_ACCESS_KEY
+from google.cloud import translate_v2 as translate
+from utils.ffmpeg_helper import crear_clip_imagen, concatenar_segmentos
+from app.config import (
+    BASE_DIR, PEXELS_API_KEY, ELEVENLABS_API_KEY, UNSPLASH_ACCESS_KEY,
+    TRANSLATION_CACHE_TTL, MAX_IN_MEMORY_DURATION, IMAGE_RESOLUTIONS,
+    TRANSLATION_CACHE_PATH, GROQ_MODEL
+)
 
 
 # --- DIRECTORIO DE VIDEOS ---
@@ -37,6 +43,7 @@ class VideoEstado(str, Enum):
     GENERANDO_VEZ = "generando_voz"
     ENSAMBLANDO = "ensamblando"
     COMPLETADO = "completado"
+    NEEDS_RENDER = "needs_render"
     ERROR = "error"
     ELIMINADO = "eliminado"
 
@@ -78,6 +85,7 @@ class VideoProyecto:
     prompt: str
     estado: str
     creado_en: str
+    prompt_original: Optional[str] = None
     analisis: Optional[dict] = None
     escenas_disenadas: list = field(default_factory=list)
     guion_completo: Optional[str] = None
@@ -111,6 +119,31 @@ class GeneradorVideo:
         self.videos_dir.mkdir(exist_ok=True)
         self._progreso: dict = {}
         self._proyectos: dict = {}  # id -> VideoProyecto
+        self.translation_cache = {}
+        self.translation_ttl = TRANSLATION_CACHE_TTL
+        self._cargar_cache()
+
+    def _cargar_cache(self):
+        if TRANSLATION_CACHE_PATH.exists():
+            try:
+                with open(TRANSLATION_CACHE_PATH, "r", encoding="utf-8") as f:
+                    self.translation_cache = json.load(f)
+                # Purge expired entries
+                now = int(time.time())
+                self.translation_cache = {
+                    k: v for k, v in self.translation_cache.items()
+                    if now - v.get("timestamp", 0) < self.translation_ttl
+                }
+            except Exception as e:
+                print(f"[TRAD] Error cargando caché: {e}")
+                self.translation_cache = {}
+
+    def _guardar_cache(self):
+        try:
+            with open(TRANSLATION_CACHE_PATH, "w", encoding="utf-8") as f:
+                json.dump(self.translation_cache, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[TRAD] Error guardando caché: {e}")
 
     def _get_proyecto_dir(self, proyecto_id: str) -> Path:
         d = self.videos_dir / proyecto_id
@@ -168,10 +201,14 @@ class GeneradorVideo:
             proyecto_id = f"proyecto_{int(time.time())}_{uuid.uuid4().hex[:8]}"
         work_dir = self._get_proyecto_dir(proyecto_id)
 
+        # Translate prompt to English if possible
+        english_prompt = await self._traducir_prompt(prompt)
+
         proyecto = VideoProyecto(
             id=proyecto_id,
             tema=tema,
-            prompt=prompt,
+            prompt=english_prompt,
+            prompt_original=prompt,
             estado=VideoEstado.ANALIZANDO,
             creado_en=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
@@ -179,8 +216,8 @@ class GeneradorVideo:
         self._proyectos[proyecto_id] = proyecto
         self._actualizar_progreso(proyecto_id, 10)
 
-        # Analizar tema con Groq
-        analisis = await self._analizar_con_ia(proyecto_id, tema, prompt, groq_client)
+        # Analizar tema con Groq using English prompt
+        analisis = await self._analizar_con_ia(proyecto_id, tema, english_prompt, groq_client)
         self._actualizar_progreso(proyecto_id, 30)
 
         return proyecto_id
@@ -556,14 +593,17 @@ Responde SOLO JSON:
         
         if nuevo_prompt:
             escena_obj["descripcion_visual"] = nuevo_prompt
-            self._guardar_proyecto(proyecto)
             
         work_dir = self._get_proyecto_dir(proyecto_id)
         
         # Pasamos solo esta escena al generador visual
         await self._generar_escenas_visuales(proyecto_id, [escena_obj], work_dir)
         
-        proyecto = self._cargar_proyecto(proyecto_id)
+        # Marcar que el video necesita ser re-renderizado
+        proyecto.estado = VideoEstado.NEEDS_RENDER
+        self._guardar_proyecto(proyecto)
+        
+        # Devolver el path de la nueva imagen
         for e in proyecto.escenas_disenadas:
             if e["numero"] == escena_num:
                 return e.get("imagen_path")
@@ -712,10 +752,10 @@ Responde SOLO JSON:
     def _get_resolucion_from_tema(self, tema: str) -> tuple[int, int]:
         texto = str(tema).lower()
         if any(w in texto for w in ["9:16", "9/16", "vertical", "tiktok", "reels", "shorts"]):
-            return (1440, 2560) # 9:16 en 2K
+            return (1080, 1920) # 9:16 Full HD
         elif any(w in texto for w in ["1:1", "cuadrado", "square", "instagram", "post"]):
             return (1080, 1080) # 1:1
-        return (2560, 1440) # 16:9 en 2K (default)
+        return (1920, 1080) # 16:9 Full HD (default más estable para 1GB RAM)
 
     # ================================================================
     # FASE 5: Generar Imágenes
@@ -1092,21 +1132,28 @@ Responde SOLO JSON:
     # FASE 7: Ensamblar con FFmpeg (usando subprocess.run para confiabilidad)
     # ================================================================
     def _run_ffmpeg(self, cmd: list) -> tuple:
-        """Ejecutar FFmpeg con subprocess.run y retornar (success, stderr)"""
+        """Ejecutar FFmpeg con subprocess.run de forma segura (evitando deadlocks por buffer lleno)"""
         try:
+            # Redirigir stdout a DEVNULL para evitar llenar el pipe, ya que FFmpeg es muy ruidoso.
+            # Capturamos solo stderr que es donde FFmpeg reporta errores y progreso.
             kwargs = {
-                "capture_output": True,
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.PIPE,
                 "text": True,
-                "timeout": 300,
             }
-            # CREATE_NO_WINDOW es exclusivo de Windows; en Linux/Render falla
             if os.name == "nt":
                 kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
-            result = subprocess.run(cmd, **kwargs)
-            return result.returncode == 0, result.stderr
-        except subprocess.TimeoutExpired:
-            return False, "Timeout FFmpeg"
+            process = subprocess.Popen(cmd, **kwargs)
+            try:
+                # Esperar a que termine capturando la salida para evitar el deadlock del buffer
+                _, stderr = process.communicate(timeout=600)
+                return process.returncode == 0, stderr or ""
+            except subprocess.TimeoutExpired:
+                process.kill()
+                _, stderr = process.communicate()
+                return False, f"Timeout FFmpeg: {stderr[-500:] if stderr else ''}"
+            
         except Exception as e:
             return False, str(e)
 
@@ -1156,7 +1203,42 @@ Responde SOLO JSON:
             for peso in pesos_escenas:
                 dur = (peso / total_peso) * dur_total
                 duraciones_escenas.append(dur)
-            
+
+            # --- NUEVA LÓGICA DE STREAMING PARA VIDEOS LARGOS ---
+            if dur_total > MAX_IN_MEMORY_DURATION:
+                print(f"[VIDEO] Duración ({dur_total:.1f}s) excede umbral ({MAX_IN_MEMORY_DURATION}s). Usando streaming helper.")
+                
+                # Obtener resolución del proyecto
+                proyecto = self._cargar_proyecto(proyecto_id)
+                width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
+                
+                clips_streaming = []
+                total_clips = len(imagenes)
+                for i, (img_path, _) in enumerate(imagenes):
+                    # Progreso entre 90 y 96%
+                    pct_streaming = 90 + int((i / total_clips) * 6)
+                    self._actualizar_progreso(proyecto_id, pct_streaming)
+                    
+                    dur_escena = duraciones_escenas[i]
+                    clip_path = work_dir / f"clip_stream_{i:02d}.mp4"
+                    await asyncio.to_thread(crear_clip_imagen, img_path, dur_escena, width, height, str(clip_path))
+                    clips_streaming.append(str(clip_path))
+                
+                # Concatenar y aplicar audio
+                self._actualizar_progreso(proyecto_id, 97)
+                await asyncio.to_thread(concatenar_segmentos, clips_streaming, str(video_final), audio_path)
+                
+                # Limpieza exhaustiva
+                for c in clips_streaming:
+                    try: Path(c).unlink(missing_ok=True)
+                    except: pass
+                
+                # Limpiar archivo concat.txt si quedó (el helper lo limpia pero por si acaso)
+                concat_txt = work_dir / "concat.txt"
+                if concat_txt.exists(): concat_txt.unlink()
+                
+                return str(video_final)
+
             # Mapa de resoluciones
             res_map = {
                 "720": (1280, 720),
@@ -1180,8 +1262,13 @@ Responde SOLO JSON:
 
             # ── PASO 1: clip por escena con Ken Burns ─────────────────
             clips = []
+            total_escenas = len(imagenes)
 
             for i, (img_path, _) in enumerate(imagenes):
+                # Progreso entre 91 y 96%
+                pct_assembly = 91 + int((i / total_escenas) * 5)
+                self._actualizar_progreso(proyecto_id, pct_assembly)
+                
                 dur_escena = duraciones_escenas[i]
                 d_frames = int(dur_escena * fps)
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
@@ -1197,13 +1284,28 @@ Responde SOLO JSON:
                 # Agregamos +5 frames de margen para que el zoom nunca se quede quieto al final
                 d_frames_safe = d_frames + 5
                 
-                vf_zoom = (
-                    f"scale=2560:1440:force_original_aspect_ratio=increase,"
-                    f"crop=2560:1440,"
-                    f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
-                    f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=2560x1440:fps={fps},"
-                    f"scale={w}:{h}"
-                )
+                # --- LÓGICA PRO DE ESCALADO Y ZOOM ---
+                # Si es vertical, escalamos a un lienzo vertical (1440x2560) con crop al centro.
+                # Si es horizontal, escalamos a un lienzo horizontal (2560x1440).
+                if h > w: # Vertical (Shorts/TikTok)
+                    # Tomamos la imagen y la escalamos para que cubra todo el alto vertical
+                    canvas_w, canvas_h = 1080, 1920
+                    vf_zoom = (
+                        f"scale=1080:1920:force_original_aspect_ratio=increase,"
+                        f"crop=1080:1920,"
+                        f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
+                        f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1080x1920:fps={fps},"
+                        f"scale={w}:{h}"
+                    )
+                else: # Horizontal (YouTube)
+                    canvas_w, canvas_h = 1920, 1080
+                    vf_zoom = (
+                        f"scale=1920:1080:force_original_aspect_ratio=increase,"
+                        f"crop=1920:1080,"
+                        f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
+                        f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1920x1080:fps={fps},"
+                        f"scale={w}:{h}"
+                    )
                 cmd_clip = [
                     "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.4f}",
                     "-i", img_path, "-vf", vf_zoom,
@@ -1235,6 +1337,7 @@ Responde SOLO JSON:
                     f.write(f"file '{c.replace(chr(92), '/')}'\n")
 
             video_base = work_dir / "video_base.mp4"
+            self._actualizar_progreso(proyecto_id, 97)
             ok, err = await asyncio.to_thread(self._run_ffmpeg, [
                 "ffmpeg", "-y", "-f", "concat", "-safe", "0",
                 "-i", str(concat_path), "-c", "copy", str(video_base)
@@ -1243,6 +1346,7 @@ Responde SOLO JSON:
                 print(f"[VIDEO] Concat error: {err[:150]}"); return None
 
             # ── PASO 3: SRT sincronizado ──────────────────────────────
+            self._actualizar_progreso(proyecto_id, 98)
             srt_path = work_dir / "subtitulos.srt"
             srt_generado = False
             
@@ -1256,16 +1360,18 @@ Responde SOLO JSON:
 
             # ── PASO 4: audio + subtítulos ────────────────────────────
             # Tamaño profesional fijo (libass usa PlayResY base)
-            font_size = 22 if h < w else 24
+            # Tamaño profesional: 60-75 para 1080p es lo ideal para Shorts
+            font_size = 68 if h > w else 45
             srt_esc = str(srt_path).replace("\\", "/")
             if os.name == "nt":
                 srt_esc = srt_esc.replace(":", "\\:")
 
+            # Estilo MoneyPrinter: Blanco puro, borde negro grueso, sin sombra, alineado abajo con buen margen
             sub_style = (
-                f"FontName=Arial,FontSize={font_size},"
+                f"FontName=Arial Black,FontSize={font_size},"
                 f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                f"BackColour=&H66000000,Outline=0.5,Shadow=0,"
-                f"BorderStyle=4,Alignment=2,MarginV=35"
+                f"BackColour=&H00000000,Outline=2,Shadow=0,"
+                f"BorderStyle=1,Alignment=2,MarginV=120"
             )
 
             cmd_final = ["ffmpeg", "-y", "-i", str(video_base)]
@@ -1273,13 +1379,14 @@ Responde SOLO JSON:
                 cmd_final += ["-i", str(audio_path)]
             cmd_final += [
                 "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
-                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-threads", "1"
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"
             ]
             if audio_path and Path(audio_path).exists():
                 cmd_final += ["-c:a", "aac"]
             cmd_final.append(str(video_final))
 
             print("[VIDEO] Aplicando SRT + audio...")
+            self._actualizar_progreso(proyecto_id, 99)
             ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_final)
 
             # Fallback sin subtítulos si libass no está disponible
@@ -1416,6 +1523,14 @@ Responde SOLO JSON:
                 return ruta
         return None
 
+    def _get_resolucion_from_tema(self, tema: str) -> tuple:
+        """Determina la resolución base (W, H) a partir del tema/formato."""
+        tema_low = tema.lower()
+        if "9:16" in tema_low or "vertical" in tema_low or "short" in tema_low or "tiktok" in tema_low:
+            return 1080, 1920
+        # Default 16:9
+        return 1920, 1080
+
     # ================================================================
     # UTILIDADES
     # ================================================================
@@ -1500,6 +1615,56 @@ Responde SOLO JSON:
             
         return 30.0
 
+    async def _traducir_prompt(self, prompt: str) -> str:
+        """Traduce un prompt a inglés para el modelo de imágenes con caché expirable"""
+        if not prompt or prompt.strip() == "":
+            return ""
+
+        # Buscar en caché
+        now = int(time.time())
+        entry = self.translation_cache.get(prompt)
+        if entry and now - entry.get("timestamp", 0) < self.translation_ttl:
+            print(f"[TRAD] Usando caché para: {prompt[:30]}...")
+            return entry.get("translated", prompt)
+
+        # Intentar traducción
+        print(f"[TRAD] Traduciendo: {prompt[:30]}...")
+        translated = prompt
+        try:
+            # 1. Google Translate
+            client_tr = translate.Client()
+            result = client_tr.translate(prompt, target_language="en")
+            translated = result["translatedText"]
+            print("[TRAD] Google Translate OK")
+        except Exception as e:
+            print(f"[TRAD] Google Translate falló: {e}. Usando fallback Groq.")
+            try:
+                # 2. Fallback Groq
+                from app.config import GROQ_API_KEY
+                if GROQ_API_KEY:
+                    import groq
+                    client_g = groq.AsyncGroq(api_key=GROQ_API_KEY)
+                    resp = await client_g.chat.completions.create(
+                        model=GROQ_MODEL,
+                        messages=[
+                            {"role": "system", "content": "Translate the following Spanish text to English. Output only the translated text, no comments."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.0
+                    )
+                    translated = resp.choices[0].message.content.strip()
+                    print("[TRAD] Fallback Groq OK")
+            except Exception as e2:
+                print(f"[TRAD] Fallback Groq falló: {e2}")
+
+        # Guardar en caché
+        self.translation_cache[prompt] = {
+            "translated": translated,
+            "timestamp": now
+        }
+        self._guardar_cache()
+        return translated
+
     async def _optimizar_prompt_imagen(self, prompt_visual: str) -> str:
         """Usa Groq para traducir y dar estilo cinematográfico al prompt (con timeout estricto)"""
         try:
@@ -1507,7 +1672,6 @@ Responde SOLO JSON:
             if not GROQ_API_KEY: return prompt_visual
             
             import groq
-            # Reutilizar cliente si es posible o crearlo con timeout
             client_groq = groq.AsyncGroq(api_key=GROQ_API_KEY, timeout=10.0)
             
             sys_msg = (
@@ -1517,7 +1681,6 @@ Responde SOLO JSON:
                 "Output ONLY the optimized prompt in English."
             )
             
-            # Timeout de 10 segundos para no bloquear todo el pipeline
             resp = await asyncio.wait_for(
                 client_groq.chat.completions.create(
                     model="llama-3.3-70b-versatile",
@@ -1527,12 +1690,10 @@ Responde SOLO JSON:
                 timeout=12.0
             )
             optimized = resp.choices[0].message.content.strip()
-            # Limpiar posibles comillas o basura
             optimized = optimized.replace('"', '').replace('\n', ' ').strip()
             return optimized
         except Exception as e:
             print(f"[IMAGENES] Salto de optimización por lentitud/error: {e}")
-            # Limpieza básica manual si falla la IA
             return prompt_visual.replace("\n", " ").strip()
 
     def _formatear_tamano(self, bytes: int) -> str:

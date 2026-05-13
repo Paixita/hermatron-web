@@ -1059,9 +1059,11 @@ class RegenerarImagenRequest(BaseModel):
     cantidad: Optional[int] = 1
 
 @app.post("/api/video/regenerar-imagen")
-async def regenerar_imagen_endpoint(req: RegenerarImagenRequest):
+async def regenerar_imagen_endpoint(req: RegenerarImagenRequest, background_tasks: BackgroundTasks):
     try:
         resultado = await regenerar_imagen_task(req.proyecto_id, req.escena_num, req.prompt_visual, req.cantidad)
+        # Una vez regenerada, disparamos el re-ensamblado automático en background
+        background_tasks.add_task(ensamblar_video_task, req.proyecto_id)
         return {"success": True, "result": resultado}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
