@@ -765,7 +765,16 @@ Responde SOLO JSON:
         fuente_usada = "placeholder"
         
         proyecto = self._cargar_proyecto(proyecto_id)
-        estilo_visual = proyecto.analisis.get("estilo_visual", "") if (proyecto and hasattr(proyecto, 'analisis') and proyecto.analisis) else "cinematic"
+        analisis = proyecto.analisis if (proyecto and hasattr(proyecto, 'analisis') and proyecto.analisis) else {}
+        estilo_visual = analisis.get("estilo_visual", "cinematic")
+        atmosfera = analisis.get("atmosfera", "professional")
+        
+        # ── COHERENCIA VISUAL: Seed compartido para TODO el proyecto ──
+        # Todas las escenas usan el mismo seed para que Pollinations
+        # genere imágenes con el mismo ADN artístico.
+        project_seed = abs(hash(proyecto_id)) % 99999
+        style_prefix = f"{estilo_visual}, {atmosfera} atmosphere, consistent art style"
+        print(f"[VIDEO] Seed compartido del proyecto: {project_seed}, Estilo: {style_prefix}")
 
         for i, escena in enumerate(escenas):
             num_escena = escena.get("numero", i+1)
@@ -774,16 +783,16 @@ Responde SOLO JSON:
             escena_dir.mkdir(exist_ok=True)
             img_path = escena_dir / "imagen.png"
 
-            # Construir un prompt robusto para Pollinations usando la descripción visual completa
+            # Construir un prompt robusto con PREFIJO DE ESTILO CONSISTENTE
             descripcion = escena.get("descripcion_visual", "")
             query = escena.get("query_pexels", "")
             
-            # Nueva Generación con IA (Pollinations.ai)
-            query_mejorado = f"{descripcion}, {query}, {estilo_visual}, highly detailed, masterpiece, 8k resolution, cinematic lighting"
-            print(f"[VIDEO]  Generando con IA (Pollinations): {query_mejorado}")
+            # El style_prefix va primero para que Pollinations lo priorice
+            query_mejorado = f"{style_prefix}, {descripcion}, {query}, highly detailed, masterpiece, 8k resolution, cinematic lighting"
+            print(f"[VIDEO]  Generando con IA (Pollinations): {query_mejorado[:80]}...")
             
             width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
-            exito = await self._generar_imagen_pollinations(query_mejorado, str(img_path), width, height)
+            exito = await self._generar_imagen_pollinations(query_mejorado, str(img_path), width, height, seed=project_seed)
             if exito:
                 fuente_usada = "pollinations"
                 # Actualizar el path en la escena del proyecto
@@ -826,12 +835,11 @@ Responde SOLO JSON:
         import gc
         gc.collect()
 
-    async def _generar_imagen_pollinations(self, query: str, ruta_salida: str, width: int = 2560, height: int = 1440) -> bool:
+    async def _generar_imagen_pollinations(self, query: str, ruta_salida: str, width: int = 2560, height: int = 1440, seed: int = None) -> bool:
         """
         Cadena de fuentes de imágenes (orden: velocidad + confiabilidad):
-        1. Pexels API (si hay key) — rápida y confiable
-        2. Pollinations.ai — IA gratis, timeout ajustado
-        3. Picsum Photos — siempre disponible, sin API key
+        1. Pollinations.ai — IA gratis con seed compartido para coherencia
+        2. Picsum Photos — siempre disponible, sin API key
         """
         import httpx
         import urllib.parse
@@ -846,7 +854,10 @@ Responde SOLO JSON:
         
         # ── FUENTE 1: Pollinations.ai (IA Generativa Principal) ──
         gen_w, gen_h = width, height
-        seed = random.randint(1, 99999)
+        # Usar seed del proyecto si se proporcionó (coherencia visual)
+        # Si no, generar uno aleatorio (para regeneraciones individuales)
+        if seed is None:
+            seed = random.randint(1, 99999)
         url_poll = (
             f"https://image.pollinations.ai/prompt/{query_cod}"
             f"?width={gen_w}&height={gen_h}&nologo=true&seed={seed}&model=flux"
@@ -1046,15 +1057,15 @@ Responde SOLO JSON:
                               generar_voz_func=None, voz: str = "es-MX-JorgeNeural") -> str:
         audio_path = work_dir / "audio_narracion.mp3"
 
-        # Extraer textos de narración del guión
-        textos = []
-        for linea in guion.split("\n"):
-            if "TEXTO:" in linea or "texto_narracion" in linea:
-                texto = linea.split(":", 1)[-1].strip().strip('"').strip("'")
-                if texto:
-                    textos.append(texto)
-
-        texto_completo = " ".join(textos) if textos else guion[:500]
+        # ── FIX CRÍTICO: Usar el texto COMPLETO sin truncar ──
+        # El texto ya viene ensamblado correctamente desde ensamblar_video_final()
+        # con todas las narraciones de todas las escenas concatenadas.
+        # NO truncar a 500 caracteres (eso causaba videos de solo 27 segundos).
+        texto_completo = guion.strip()
+        if not texto_completo:
+            texto_completo = "Video generado con Hermatron."
+        
+        print(f"[AUDIO] Texto completo para narración: {len(texto_completo)} caracteres ({len(texto_completo.split())} palabras)")
 
         # Intento 1: ElevenLabs
         if ELEVENLABS_API_KEY:
@@ -1080,7 +1091,7 @@ Responde SOLO JSON:
             edge_voz = voz if "-" in voz else "es-MX-JorgeNeural"
             print(f"[AUDIO] Generando con edge-tts ({edge_voz})...")
             communicate = edge_tts.Communicate(texto_completo, edge_voz, rate="-5%", volume="+5%")
-            await asyncio.wait_for(communicate.save(str(audio_path)), timeout=40.0)
+            await asyncio.wait_for(communicate.save(str(audio_path)), timeout=120.0)
             print(f"[AUDIO]  edge-tts OK")
             return str(audio_path)
         except Exception as e:
