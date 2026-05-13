@@ -307,7 +307,7 @@ Analiza este tema como director de cine profesional.
 
         # Generar guión + escenas diseñadas
         system_prompt = f"""
-Eres un DIRECTOR DE CINE creando un video para YouTube.
+Eres un DIRECTOR DE CINE PROFESIONAL creando un video LARGO y detallado para YouTube.
 
 CONTEXTO DEL VIDEO:
 - Tono: {tono}
@@ -315,11 +315,11 @@ CONTEXTO DEL VIDEO:
 - Atmósfera: {atmosfera}
 
 Tu trabajo:
-1. Crear un GUIÓN COHERENTE con narración poderosa
-2. DISEÑAR CADA ESCENA con visión cinematográfica completa
+1. Crear un GUIÓN EXTENSO Y DETALLADO con narración profunda y envolvente
+2. DISEÑAR MUCHAS ESCENAS con visión cinematográfica completa
 
 Para cada escena debes definir:
-- texto_narracion: Lo que dice el narrador (poderoso, conciso)
+- texto_narracion: Lo que dice el narrador. DEBE SER EXTENSO: entre 60 y 100 palabras por escena. Incluye datos, reflexiones, descripciones vívidas y ganchos narrativos. NO seas breve.
 - descripcion_visual: Qué se ve en pantalla (MANTÉN ESTRICTA COHERENCIA VISUAL Y NARRATIVA con el TEMA ORIGINAL: "{proyecto.tema}" y la DESCRIPCIÓN ORIGINAL: "{proyecto.prompt}". TODAS las imágenes deben parecer del mismo video).
 - angulo_camara: Plano general, primer plano, picado, contrapicado, etc.
 - iluminacion: Dramática, natural, contraluz, dorada, etc.
@@ -328,22 +328,24 @@ Para cada escena debes definir:
 - emocion: Qué debe transmitir (tensión, asombro, curiosidad, etc.)
 - query_pexels: Búsqueda en inglés para Pexels (máx 5 palabras)
 
-REGLAS CRÍTICAS:
-- CADA ESCENA debe tener un 'texto_narracion' de al menos 20 palabras. NO lo dejes vacío.
-- GENERA AL MENOS 5 ESCENAS para que el video sea dinámico y profesional.
+REGLAS CRÍTICAS DE DURACIÓN:
+- GENERA ENTRE 10 Y 15 ESCENAS. Esto NO es opcional. Un video profesional necesita al menos 10 escenas.
+- CADA ESCENA DEBE tener un 'texto_narracion' de MÍNIMO 60 PALABRAS y MÁXIMO 100 PALABRAS. NO lo dejes corto. Cuenta las palabras mentalmente.
+- El guion_completo debe ser la concatenación de TODAS las narraciones, resultando en un texto de al menos 800 palabras.
 - CADA ESCENA debe ser COHERENTE con las demás (misma línea visual)
 - La escena 1 debe tener un HOOK visual impactante
-- Las transiciones entre escenas deben ser fluidas
-- Incluye una escena final con CTA poderoso
+- Las transiciones entre escenas deben ser fluidas y naturales
+- Incluye una escena final con CTA poderoso y memorable
+- NO repitas información entre escenas. Cada escena debe aportar algo nuevo.
 
 Responde SOLO con JSON válido, sin markdown ni texto extra:
 {{
-    "guion_completo": "texto completo del guión narrativo",
+    "guion_completo": "texto completo del guión narrativo (800+ palabras)",
     "escenas": [
         {{
             "numero": 1,
             "titulo": "Apertura impactante",
-            "texto_narracion": "Escribe aquí al menos 20 palabras de narración profesional...",
+            "texto_narracion": "Escribe aquí MÍNIMO 60 palabras de narración profesional, detallada, envolvente...",
             "descripcion_visual": "Descripción cinematográfica detallada...",
             "angulo_camara": "...",
             "iluminacion": "...",
@@ -370,7 +372,7 @@ Diseña el video completo como director de cine.
                 ],
                 model="llama-3.3-70b-versatile",
                 temperature=0.7,
-                max_tokens=4096,
+                max_tokens=8192,
                 response_format={"type": "json_object"}
             )
             texto = response.choices[0].message.content.strip()
