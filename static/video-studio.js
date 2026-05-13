@@ -389,9 +389,9 @@ async function crearVideoDesdeStudio() {
                     
                     setTimeout(() => {
                         // En lugar de ocultar el progreso y esperar, abrimos el storyboard
-                        // y disparamos la segunda fase automáticamente.
+                        // y dejamos que el usuario lo revise antes de renderizar.
                         renderStoryboard(proyectoActual); 
-                        ensamblarVideoFinal();
+                        // ensamblarVideoFinal(); // DESACTIVADO: Ahora el usuario revisa primero.
                     }, 1000);
                 }
 
@@ -894,7 +894,6 @@ async function renderStoryboard(proyectoId) {
                 </div>
                 <div id="alternativas-${escena.numero}" class="sc-alternativas"></div>
             `;
-            grid.appendChild(card);
             grid.appendChild(card);
         });
     } catch (e) {

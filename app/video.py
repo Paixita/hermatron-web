@@ -1226,6 +1226,7 @@ Responde SOLO JSON:
                 
                 # Concatenar y aplicar audio
                 self._actualizar_progreso(proyecto_id, 97)
+                # Aumentamos el timeout a 900s (15 min) para videos de 10 minutos
                 await asyncio.to_thread(concatenar_segmentos, clips_streaming, str(video_final), audio_path)
                 
                 # Limpieza exhaustiva
@@ -1277,9 +1278,9 @@ Responde SOLO JSON:
                 # Renderizamos internamente en 2K (2560x1440) y luego bajamos a 1080p.
                 # Esto suaviza el movimiento sub-píxel.
                 if i % 2 == 0:
-                    zoom_expr = "zoom+0.001"
+                    zoom_expr = "zoom+0.0006"
                 else:
-                    zoom_expr = "if(eq(on,1),1.1,max(1.001,zoom-0.001))"
+                    zoom_expr = "if(eq(on,1),1.1,max(1.0006,zoom-0.0006))"
                 
                 # Agregamos +5 frames de margen para que el zoom nunca se quede quieto al final
                 d_frames_safe = d_frames + 5
@@ -1358,20 +1359,25 @@ Responde SOLO JSON:
                 print("[VIDEO] Fallback: generando subtítulos matemáticos...")
                 srt_path.write_text(self._generar_srt(imagenes, duraciones_escenas), encoding="utf-8")
 
-            # ── PASO 4: audio + subtítulos ────────────────────────────
-            # Tamaño profesional fijo (libass usa PlayResY base)
-            # Tamaño profesional: 60-75 para 1080p es lo ideal para Shorts
-            font_size = 68 if h > w else 45
+            # --- PASO 4: audio + subtítulos ────────────────────────────
+            # Ajustamos PlayResY a la altura real para que el tamaño de letra sea predecible
+            play_res_y = h
+            
+            # Tamaño profesional (en píxeles): 75 para Vertical (7% del ancho), 65 para Horizontal
+            f_size = 75 if h > w else 65
             srt_esc = str(srt_path).replace("\\", "/")
             if os.name == "nt":
                 srt_esc = srt_esc.replace(":", "\\:")
+            
+            # Ajustar margen vertical según formato para no tapar el centro
+            margin_v = 350 if h > w else 120 
 
-            # Estilo MoneyPrinter: Blanco puro, borde negro grueso, sin sombra, alineado abajo con buen margen
+            # Estilo MoneyPrinter: Blanco puro, borde negro grueso, alineado abajo
             sub_style = (
-                f"FontName=Arial Black,FontSize={font_size},"
+                f"PlayResY={play_res_y},FontName=Arial Black,FontSize={f_size},"
                 f"PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
-                f"BackColour=&H00000000,Outline=2,Shadow=0,"
-                f"BorderStyle=1,Alignment=2,MarginV=120"
+                f"BackColour=&H00000000,Outline=3,Shadow=0,"
+                f"BorderStyle=1,Alignment=2,MarginV={margin_v}"
             )
 
             cmd_final = ["ffmpeg", "-y", "-i", str(video_base)]
@@ -1450,7 +1456,7 @@ Responde SOLO JSON:
             t = scene_start
             for chunk in chunks:
                 dur_chunk = dur_escena * (len(chunk) / total_chars)
-                t_end = t + dur_chunk - 0.05
+                t_end = t + dur_chunk
                 lines += [str(idx), f"{self._fmt_srt(t)} --> {self._fmt_srt(t_end)}", chunk, ""]
                 idx += 1
                 t += dur_chunk

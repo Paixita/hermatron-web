@@ -12,7 +12,7 @@ def crear_clip_imagen(imagen_path: str, duracion: float, width: int, height: int
         "-i", imagen_path,
         "-t", f"{duracion:.4f}",
         "-vf", f"scale={width}:{height},format=yuv420p",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
         out_path
     ]
     try:
@@ -49,7 +49,8 @@ def concatenar_segmentos(segmentos: List[str], output_path: str, audio_path: str
             "-c", "copy",
             output_path
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+        # Aumentamos a 1200s (20 min) para concatenar videos largos
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1200)
 
         # Si hay audio, mezclarlo
         if audio_path and os.path.exists(audio_path):
@@ -68,9 +69,10 @@ def concatenar_segmentos(segmentos: List[str], output_path: str, audio_path: str
             cmd_audio = [
                 "ffmpeg", "-y", "-i", temp_video, "-i", audio_path,
                 "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
-                "-shortest", output_path
+                output_path
             ]
-            subprocess.run(cmd_audio, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
+            # Aumentamos a 1800s (30 min) para el merge final de audio
+            subprocess.run(cmd_audio, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
             if os.path.exists(temp_video):
                 try: os.remove(temp_video)
                 except: pass
