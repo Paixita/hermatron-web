@@ -307,48 +307,38 @@ Analiza este tema como director de cine profesional.
 
         # Generar guión + escenas diseñadas
         system_prompt = f"""
-Eres un DIRECTOR DE CINE PROFESIONAL creando un video LARGO y detallado para YouTube.
+Actúa como un DIRECTOR DE CINE e INGENIEIRO DE PROMPTS DE ÉLITE (Arquitecto Visual).
+Tu objetivo es transformar la idea del usuario en un video largo de ultra-alta fidelidad con una narrativa envolvente.
 
-CONTEXTO DEL VIDEO:
-- Tono: {tono}
-- Estilo visual: {estilo}
-- Atmósfera: {atmosfera}
+🛠 ESTRUCTURA DE PENSAMIENTO (Arquitecto Visual)
+Cada escena debe seguir este orden lógico para las descripciones visuales:
+1. Núcleo de la Escena (Sujeto): Define quién o qué es el protagonista con adjetivos específicos.
+2. Estilo y Medio: Define si es "Cinemática de Hollywood", "Animación 3D estilo Pixar", "Anime de alta gama (Studio Ghibli style)", o "Fotografía Realista".
+3. Composición y Cámara: Tipo de plano (Primer plano, Plano americano, Gran angular) y ángulo (Cenital, Nadir, Nivel de ojos).
+4. Atmósfera e Iluminación: Define la luz (Luz volumétrica, Golden hour, Neones cyberpunk) y el sentimiento (Melancólico, Épico, Elegante).
+5. Detalles Técnicos (Calidad): Agrega terminología de renderizado como "8K resolution, Unreal Engine 5 render, Ray tracing, highly detailed textures, masterwork".
 
-Tu trabajo:
-1. Crear un GUIÓN EXTENSO Y DETALLADO con narración profunda y envolvente
-2. DISEÑAR MUCHAS ESCENAS con visión cinematográfica completa
+🎨 CONFIGURACIONES SEGÚN EL ESTILO:
+- Si es Película (Live Action): "Cinematic shot, hyper-realistic, [Sujeto], dressed in elegant attire, dramatic rim lighting, shot on 35mm lens, depth of field, anamorphic bokeh, 8k."
+- Si es Animación 3D: "High-end 3D animation, stylized [Sujeto], vibrant colors, subsurface scattering on skin, Disney/Pixar aesthetic, 4k render."
+- Si es Anime: "Professional Anime illustration, [Sujeto], sharp lines, cel-shaded, cinematic background art, Makoto Shinkai style, high contrast, 4k."
 
-Para cada escena debes definir:
-- texto_narracion: Lo que dice el narrador. DEBE SER EXTENSO: entre 60 y 100 palabras por escena. Incluye datos, reflexiones, descripciones vívidas y ganchos narrativos. NO seas breve.
-- descripcion_visual: Qué se ve en pantalla. DEBE SER UNA REPRESENTACIÓN LITERAL de lo que se dice en la narración. Si hablas de 'esfuerzo', muestra a una persona esforzándose (ej. estudiando, trabajando, levantando pesas). NO USES METÁFORAS ABSTRACTAS como auroras boreales, galaxias o paisajes vacíos a menos que el video sea sobre astronomía. MANTÉN ESTRICTA COHERENCIA VISUAL (misma persona, misma ropa, mismo ambiente si es posible).
-- angulo_camara: Plano general, primer plano, picado, contrapicado, etc.
-- iluminacion: Dramática, natural, contraluz, dorada, etc.
-- paleta_colores: Fría, cálida, neutra, alto contraste, etc.
-- movimiento: Estático, paneo, zoom, travelling, etc.
-- emocion: Qué debe transmitir (tensión, asombro, curiosidad, etc.)
-- query_pexels: Búsqueda en inglés para Pexels (máx 5 palabras)
+🚫 REGLAS DE ORO (Evitar Descoordinación):
+- CERO AMBIGÜEDAD: Define sujetos específicos (ej: "un hombre elegante de 30 años con traje italiano").
+- CONSISTENCIA DE PERSONAJE: Describe rasgos físicos inalterables para que no cambien entre escenas.
+- IDIOMA: Los campos técnicos (descripcion_visual) deben estar en INGLÉS para máxima compatibilidad con modelos de difusión.
+- PROHIBIDO EL ABSTRACTISMO: No uses auroras o galaxias para temas humanos. Muestra situaciones REALES y LITERALES.
+- DURACIÓN: Genera entre 10 y 15 escenas. Cada 'texto_narracion' debe tener entre 60 y 100 palabras.
 
-REGLAS CRÍTICAS DE DURACIÓN Y COHERENCIA:
-- GENERA ENTRE 10 Y 15 ESCENAS. Esto NO es opcional. Un video profesional necesita al menos 10 escenas.
-- CADA ESCENA DEBE tener un 'texto_narracion' de MÍNIMO 60 PALABRAS y MÁXIMO 100 PALABRAS. NO lo dejes corto. Cuenta las palabras mentalmente.
-- El guion_completo debe ser la concatenación de TODAS las narraciones, resultando en un texto de al menos 800 palabras.
-- PROHIBIDO EL "ABSTRACTISMO": Si el video es sobre superación personal, finanzas o motivación, las imágenes deben mostrar PERSONAS REALES en SITUACIONES REALES. Evita a toda costa imágenes de galaxias, nebulosas o estrellas que no tengan nada que ver con el texto.
-- CADA ESCENA debe ser COHERENTE con las demás (misma línea visual)
-- La escena 1 debe tener un HOOK visual impactante
-- Las transiciones entre escenas deben ser fluidas y naturales
-- Incluye una escena final con CTA poderoso y memorable
-- IMPORTANTE: Escapa cualquier comilla doble (") dentro de los textos para no romper el formato JSON.
-- NO repitas información entre escenas. Cada escena debe aportar algo nuevo.
-
-Responde SOLO con JSON válido, sin markdown ni texto extra:
+Responde SOLO con JSON válido, sin markdown:
 {{
     "guion_completo": "texto completo del guión narrativo (800+ palabras)",
     "escenas": [
         {{
             "numero": 1,
             "titulo": "Apertura impactante",
-            "texto_narracion": "Escribe aquí MÍNIMO 60 palabras de narración profesional, detallada, envolvente...",
-            "descripcion_visual": "Descripción cinematográfica detallada y consistente con el estilo del video...",
+            "texto_narracion": "Escribe aquí MÍNIMO 60 palabras de narración profesional...",
+            "descripcion_visual": "[Sujeto], [Estilo], [Cámara], [Iluminación], [Calidad] (EN INGLÉS)",
             "angulo_camara": "...",
             "iluminacion": "...",
             "paleta_colores": "...",
@@ -1689,11 +1679,14 @@ Responde SOLO JSON:
             client_groq = groq.AsyncGroq(api_key=GROQ_API_KEY, timeout=10.0)
             
             sys_msg = (
-                "You are a professional cinematic prompt engineer. "
-                "Translate to English and expand with technical keywords for FLUX. "
-                "Style: Photorealistic, raw photo, realistic lighting, highly detailed. "
-                "CRITICAL: The image must be a LITERAL representation of the scene. Avoid abstract metaphors like stars or auroras unless the scene is about space. "
-                "Output ONLY the optimized prompt in English."
+                "Act as an ELITE PROMPT ENGINEER (Visual Architect). Your goal is to transform simple ideas into ultra-high fidelity visual descriptions for image/video generators. "
+                "Structure each prompt in this strict order: "
+                "1. Core Subject (Nucleus): Define who or what with specific adjectives. "
+                "2. Style & Medium: Cinematic, 3D Animation, Professional Anime, or Photorealistic. "
+                "3. Composition & Camera: Shot type (Close-up, Wide, etc.) and angle. "
+                "4. Atmosphere & Lighting: Lighting type (Volumetric, Golden hour) and mood. "
+                "5. Technical Quality: (8k, Unreal Engine 5 render, Ray tracing, highly detailed). "
+                "RULES: Zero ambiguity. Final output MUST BE IN ENGLISH."
             )
             # Tweak: Append aspect ratio hint based on resolution
             ar_hint = "portrait aspect ratio, 9:16, vertical" if height > width else "landscape aspect ratio, 16:9, horizontal"

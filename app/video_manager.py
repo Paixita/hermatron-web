@@ -56,7 +56,10 @@ def pre_producir_video_task(payload: Dict[str, Any]):
         # self.update_state(state="GENERANDO_IMAGENES", meta={"progreso": 50})
         run_async(generador_video.pre_producir_video(proyecto_id))
         
-        # self.update_state(state="LISTO_PARA_REVISION", meta={"progreso": 100})
+        # 4. Ensamblar automáticamente (Video First Flow)
+        print(f"[MANAGER] Iniciando ensamblado automático para {proyecto_id}...")
+        ensamblar_video_task(proyecto_id)
+        
         return {"status": "success", "proyecto_id": proyecto_id}
         
     except Exception as e:

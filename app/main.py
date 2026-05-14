@@ -1074,7 +1074,7 @@ class SeleccionarImagenRequest(BaseModel):
     imagen_path: str
 
 @app.post("/api/video/seleccionar-imagen")
-async def seleccionar_imagen_endpoint(req: SeleccionarImagenRequest):
+async def seleccionar_imagen_endpoint(req: SeleccionarImagenRequest, background_tasks: BackgroundTasks):
     try:
         # Actualizar el proyecto con la ruta de la imagen seleccionada
         proj_obj = generador_video._cargar_proyecto(req.proyecto_id)
@@ -1093,6 +1093,10 @@ async def seleccionar_imagen_endpoint(req: SeleccionarImagenRequest):
                 break
         
         generador_video._guardar_proyecto(proj_obj)
+        
+        # Disparar re-ensamblado automático
+        background_tasks.add_task(ensamblar_video_task, req.proyecto_id)
+        
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
