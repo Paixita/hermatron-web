@@ -372,7 +372,7 @@ Diseña el video completo como director de cine.
                 ],
                 model="llama-3.3-70b-versatile",
                 temperature=0.7,
-                max_tokens=8192,
+                max_tokens=9192,
                 response_format={"type": "json_object"}
             )
             texto = response.choices[0].message.content.strip()
