@@ -336,6 +336,7 @@ REGLAS CRÍTICAS DE DURACIÓN:
 - La escena 1 debe tener un HOOK visual impactante
 - Las transiciones entre escenas deben ser fluidas y naturales
 - Incluye una escena final con CTA poderoso y memorable
+- IMPORTANTE: Escapa cualquier comilla doble (") dentro de los textos para no romper el formato JSON.
 - NO repitas información entre escenas. Cada escena debe aportar algo nuevo.
 
 Responde SOLO con JSON válido, sin markdown ni texto extra:
@@ -346,7 +347,7 @@ Responde SOLO con JSON válido, sin markdown ni texto extra:
             "numero": 1,
             "titulo": "Apertura impactante",
             "texto_narracion": "Escribe aquí MÍNIMO 60 palabras de narración profesional, detallada, envolvente...",
-            "descripcion_visual": "Descripción cinematográfica detallada...",
+            "descripcion_visual": "Descripción cinematográfica detallada y consistente con el estilo del video...",
             "angulo_camara": "...",
             "iluminacion": "...",
             "paleta_colores": "...",
@@ -372,7 +373,7 @@ Diseña el video completo como director de cine.
                 ],
                 model="llama-3.3-70b-versatile",
                 temperature=0.7,
-                max_tokens=9192,
+                max_tokens=9898,
                 response_format={"type": "json_object"}
             )
             texto = response.choices[0].message.content.strip()

@@ -16,7 +16,7 @@ def crear_clip_imagen(imagen_path: str, duracion: float, width: int, height: int
         out_path
     ]
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=300)
     except subprocess.TimeoutExpired:
         print(f"[FFMPEG] Timeout creando clip para {imagen_path}")
         raise
