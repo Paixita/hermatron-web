@@ -320,7 +320,7 @@ Tu trabajo:
 
 Para cada escena debes definir:
 - texto_narracion: Lo que dice el narrador. DEBE SER EXTENSO: entre 60 y 100 palabras por escena. Incluye datos, reflexiones, descripciones vívidas y ganchos narrativos. NO seas breve.
-- descripcion_visual: Qué se ve en pantalla (MANTÉN ESTRICTA COHERENCIA VISUAL Y NARRATIVA con el TEMA ORIGINAL: "{proyecto.tema}" y la DESCRIPCIÓN ORIGINAL: "{proyecto.prompt}". TODAS las imágenes deben parecer del mismo video).
+- descripcion_visual: Qué se ve en pantalla. DEBE SER UNA REPRESENTACIÓN LITERAL de lo que se dice en la narración. Si hablas de 'esfuerzo', muestra a una persona esforzándose (ej. estudiando, trabajando, levantando pesas). NO USES METÁFORAS ABSTRACTAS como auroras boreales, galaxias o paisajes vacíos a menos que el video sea sobre astronomía. MANTÉN ESTRICTA COHERENCIA VISUAL (misma persona, misma ropa, mismo ambiente si es posible).
 - angulo_camara: Plano general, primer plano, picado, contrapicado, etc.
 - iluminacion: Dramática, natural, contraluz, dorada, etc.
 - paleta_colores: Fría, cálida, neutra, alto contraste, etc.
@@ -328,10 +328,11 @@ Para cada escena debes definir:
 - emocion: Qué debe transmitir (tensión, asombro, curiosidad, etc.)
 - query_pexels: Búsqueda en inglés para Pexels (máx 5 palabras)
 
-REGLAS CRÍTICAS DE DURACIÓN:
+REGLAS CRÍTICAS DE DURACIÓN Y COHERENCIA:
 - GENERA ENTRE 10 Y 15 ESCENAS. Esto NO es opcional. Un video profesional necesita al menos 10 escenas.
 - CADA ESCENA DEBE tener un 'texto_narracion' de MÍNIMO 60 PALABRAS y MÁXIMO 100 PALABRAS. NO lo dejes corto. Cuenta las palabras mentalmente.
 - El guion_completo debe ser la concatenación de TODAS las narraciones, resultando en un texto de al menos 800 palabras.
+- PROHIBIDO EL "ABSTRACTISMO": Si el video es sobre superación personal, finanzas o motivación, las imágenes deben mostrar PERSONAS REALES en SITUACIONES REALES. Evita a toda costa imágenes de galaxias, nebulosas o estrellas que no tengan nada que ver con el texto.
 - CADA ESCENA debe ser COHERENTE con las demás (misma línea visual)
 - La escena 1 debe tener un HOOK visual impactante
 - Las transiciones entre escenas deben ser fluidas y naturales
@@ -1696,8 +1697,9 @@ Responde SOLO JSON:
             
             sys_msg = (
                 "You are a professional cinematic prompt engineer. "
-                "Translate to English and expand with technical keywords (Flux/Stable Diffusion). "
-                "Style: Cinematic, 8k, hyper-realistic, high resolution. "
+                "Translate to English and expand with technical keywords for FLUX. "
+                "Style: Photorealistic, raw photo, realistic lighting, highly detailed. "
+                "CRITICAL: The image must be a LITERAL representation of the scene. Avoid abstract metaphors like stars or auroras unless the scene is about space. "
                 "Output ONLY the optimized prompt in English."
             )
             
