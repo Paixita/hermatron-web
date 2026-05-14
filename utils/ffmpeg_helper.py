@@ -7,11 +7,26 @@ def crear_clip_imagen(imagen_path: str, duracion: float, width: int, height: int
     """
     Crea un clip de video (MP4) a partir de una imagen estática usando FFmpeg.
     """
+    # Determinar dirección del zoom (alternar para dinamismo)
+    # i = int(Path(out_path).stem.split('_')[-1]) # Extraer índice del nombre del archivo
+    # zoom_expr = "zoom+0.0006" if i % 2 == 0 else "zoom-0.0006"
+    
+    # Por simplicidad y robustez en el helper, usamos un zoom-in suave estándar
+    # que funciona bien en todas las duraciones.
+    zoom_expr = "zoom+0.0005"
+    fps = 30
+    d_frames = int(duracion * fps) + 5
+    
     cmd = [
         "ffmpeg", "-y", "-loop", "1",
         "-i", imagen_path,
         "-t", f"{duracion:.4f}",
-        "-vf", f"scale={width}:{height},format=yuv420p",
+        "-vf", (
+            f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,"
+            f"zoompan=z='{zoom_expr}':d={d_frames}:"
+            f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s={width}x{height}:fps={fps},"
+            f"format=yuv420p"
+        ),
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
         out_path
     ]

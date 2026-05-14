@@ -853,7 +853,7 @@ Responde SOLO JSON:
         query_limpio = query[:1000].replace("\n", " ").replace('"', "").strip()
 
         # ── OPTIMIZACIÓN DE PROMPT (Director de Arte IA) ──
-        query_opt = await self._optimizar_prompt_imagen(query_limpio)
+        query_opt = await self._optimizar_prompt_imagen(query_limpio, width, height)
         query_cod = urllib.parse.quote(query_opt)
         
         # ── FUENTE 1: Pollinations.ai (IA Generativa Principal) ──
@@ -1262,17 +1262,16 @@ Responde SOLO JSON:
                 "1920": (2560, 1440), # 2K
                 "2160": (3840, 2160)  # 4K
             }
-            base_w, base_h = res_map.get(resolucion, (1280, 720))
-            
-            # Detectar si es vertical
-            w, h = base_w, base_h
-            try:
-                with PIL.Image.open(imagenes[0][0]) as first_img:
-                    orig_w, orig_h = first_img.size
-                    if orig_h > orig_w: # Vertical 9:16
-                        w, h = base_h, base_w
-            except Exception:
-                pass
+            # Determinar formato (W, H)
+            width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
+            w, h = width, height
+            # Forzar detección robusta: si el tema dice vertical o el usuario eligió 9:16
+            if "9:16" in (proyecto.tema or "").lower() or "vertical" in (proyecto.tema or "").lower() or "reels" in (proyecto.tema or "").lower():
+                w, h = height, width if height < width else (width, height)
+                # Asegurar que h sea mayor que w para vertical
+                if w > h: w, h = h, w
+            else:
+                if w < h: w, h = h, w
 
             fps = 30  # Subido a 30 para evitar el efecto de 'tildarse' (lag)
 
@@ -1286,25 +1285,19 @@ Responde SOLO JSON:
                 self._actualizar_progreso(proyecto_id, pct_assembly)
                 
                 dur_escena = duraciones_escenas[i]
-                d_frames = int(dur_escena * fps)
+                dur_clip = dur_escena + 1.0 # Colchón de 1 segundo para evitar cortes
+                d_frames = int(dur_clip * fps)
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
                 
-                # Zoom estabilizado con OVERSAMPLING (para eliminar el "baile" / vibración)
-                # Renderizamos internamente en 2K (2560x1440) y luego bajamos a 1080p.
-                # Esto suaviza el movimiento sub-píxel.
+                # Zoom estabilizado con OVERSAMPLING
                 if i % 2 == 0:
                     zoom_expr = "zoom+0.0006"
                 else:
                     zoom_expr = "if(eq(on,1),1.1,max(1.0006,zoom-0.0006))"
                 
-                # Agregamos +5 frames de margen para que el zoom nunca se quede quieto al final
-                d_frames_safe = d_frames + 5
+                d_frames_safe = d_frames + 10
                 
-                # --- LÓGICA PRO DE ESCALADO Y ZOOM ---
-                # Si es vertical, escalamos a un lienzo vertical (1440x2560) con crop al centro.
-                # Si es horizontal, escalamos a un lienzo horizontal (2560x1440).
                 if h > w: # Vertical (Shorts/TikTok)
-                    # Tomamos la imagen y la escalamos para que cubra todo el alto vertical
                     canvas_w, canvas_h = 1080, 1920
                     vf_zoom = (
                         f"scale=1080:1920:force_original_aspect_ratio=increase,"
@@ -1323,10 +1316,10 @@ Responde SOLO JSON:
                         f"scale={w}:{h}"
                     )
                 cmd_clip = [
-                    "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.4f}",
+                    "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_clip:.4f}",
                     "-i", img_path, "-vf", vf_zoom,
                     "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                    "-t", f"{dur_escena:.4f}", str(clip_path)
+                    "-t", f"{dur_clip:.4f}", str(clip_path)
                 ]
                 ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_clip)
                 if ok and clip_path.exists():
@@ -1547,7 +1540,7 @@ Responde SOLO JSON:
     def _get_resolucion_from_tema(self, tema: str) -> tuple:
         """Determina la resolución base (W, H) a partir del tema/formato."""
         tema_low = tema.lower()
-        if "9:16" in tema_low or "vertical" in tema_low or "short" in tema_low or "tiktok" in tema_low:
+        if "9:16" in tema_low or "vertical" in tema_low or "short" in tema_low or "tiktok" in tema_low or "reels" in tema_low:
             return 1080, 1920
         # Default 16:9
         return 1920, 1080
@@ -1686,7 +1679,7 @@ Responde SOLO JSON:
         self._guardar_cache()
         return translated
 
-    async def _optimizar_prompt_imagen(self, prompt_visual: str) -> str:
+    async def _optimizar_prompt_imagen(self, prompt_visual: str, width: int = 1920, height: int = 1080) -> str:
         """Usa Groq para traducir y dar estilo cinematográfico al prompt (con timeout estricto)"""
         try:
             from app.config import GROQ_API_KEY
@@ -1702,6 +1695,9 @@ Responde SOLO JSON:
                 "CRITICAL: The image must be a LITERAL representation of the scene. Avoid abstract metaphors like stars or auroras unless the scene is about space. "
                 "Output ONLY the optimized prompt in English."
             )
+            # Tweak: Append aspect ratio hint based on resolution
+            ar_hint = "portrait aspect ratio, 9:16, vertical" if height > width else "landscape aspect ratio, 16:9, horizontal"
+            sys_msg += f" Note: The target is {ar_hint}."
             
             resp = await asyncio.wait_for(
                 client_groq.chat.completions.create(
