@@ -31,5 +31,5 @@ psutil>=5.9.0
 Pillow          # Generar imágenes/thumbnails
 # Nota: moviepy ha sido eliminado para optimizar memoria en Render (se usa FFmpeg nativo)
 google-cloud-translate>=3.0.0
-
-
+google-genai>=1.0.0
+gradio-client>=0.17.0

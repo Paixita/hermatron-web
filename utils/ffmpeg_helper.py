@@ -22,7 +22,7 @@ def crear_clip_imagen(imagen_path: str, duracion: float, width: int, height: int
         "-i", imagen_path,
         "-t", f"{duracion:.4f}",
         "-vf", (
-            f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},"
             f"zoompan=z='{zoom_expr}':d={d_frames}:"
             f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s={width}x{height}:fps={fps},"
             f"format=yuv420p"

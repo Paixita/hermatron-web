@@ -1179,6 +1179,9 @@ function formatearRespuesta(texto) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 
+    // Imágenes ![alt](url)
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<div class="mensaje-imagen"><img src="$2" alt="$1" onclick="window.open(\'$2\', \'_blank\')"></div>');
+
     // Bloques de código (```)
     html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
         const id = 'code-' + Math.random().toString(36).substr(2, 9);
@@ -1390,6 +1393,7 @@ function togglePauseAudio() {
 // FUNCIÓN PRINCIPAL: ENVIAR MENSAJE
 // ================================================================
 async function enviar() {
+    if (grabacionActiva) detenerDictado();
     const texto = userInput.value.trim();
     if ((!texto && imagenesSubidas.length === 0) || enviando) return;
 
@@ -1485,4 +1489,94 @@ async function enviar() {
         if (sendBtn) sendBtn.disabled = false;
         if (typingIndicator) typingIndicator.textContent = '';
     }
+}
+
+// Función especial solicitada: Nano Banana
+async function crearNanoBanana() {
+    if (enviando) return;
+    
+    showToast('🍌 Preparando tu Nano Banana...', 'info');
+    
+    // Prompt optimizado para la creación de la Nano Banana
+    const prompt = "Genera una imagen de un 'Nano Banana'. Sé creativo: que sea una banana pequeña con estilo nanotecnológico, circuitos brillantes o aspecto futurista, alta resolución, estilo cinematográfico.";
+    
+    // Inyectar en el input y disparar el envío
+    const userInput = document.getElementById('userInput');
+    if (userInput) {
+        userInput.value = prompt;
+        // Esperar un momento para que el usuario vea el texto (efecto visual)
+        setTimeout(async () => {
+            await enviar();
+        }, 300);
+    }
+}
+
+// ==========================================
+// SISTEMA DE DICTADO (VOZ A TEXTO)
+// ==========================================
+let recognition = null;
+let grabacionActiva = false;
+
+function toggleDictado() {
+    if (grabacionActiva) {
+        detenerDictado();
+        return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        showToast('❌ Tu navegador no soporta dictado por voz.', 'error');
+        return;
+    }
+
+    if (!recognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'es-ES';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onresult = (event) => {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            userInput.value = transcript;
+            autoResize(userInput);
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Error dictado:', event.error);
+            if (event.error !== 'no-speech') {
+                detenerDictado();
+            }
+            if (event.error === 'not-allowed') {
+                showToast('❌ Permiso de micrófono denegado.', 'error');
+            }
+        };
+
+        recognition.onend = () => {
+            if (grabacionActiva) {
+                try { recognition.start(); } catch(e) {}
+            }
+        };
+    }
+
+    try {
+        recognition.start();
+        grabacionActiva = true;
+        document.getElementById('btnMic').classList.add('grabando');
+        showToast('🎤 Escuchando...', 'info');
+    } catch (e) {
+        console.warn('Error al iniciar dictado:', e);
+    }
+}
+
+function detenerDictado() {
+    grabacionActiva = false;
+    if (recognition) {
+        recognition.stop();
+    }
+    const btnMic = document.getElementById('btnMic');
+    if (btnMic) btnMic.classList.remove('grabando');
+    showToast('✅ Dictado finalizado', 'success');
 }

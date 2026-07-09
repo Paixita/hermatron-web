@@ -251,11 +251,15 @@ def _ejecutar_comando_windows_no_bloqueante(comando: str) -> dict:
 SYSTEM_PROMPT = """Eres HERMATRON, un Estudio de Inteligencia Artificial Multimodal y Asistente Creativo.
 ATENCIÓN: Tienes capacidades avanzadas tanto en la nube como en el sistema local.
 TUS CAPACIDADES PRINCIPALES:
-1. Eres un DIRECTOR DE CINE: Puedes crear videos cinematográficos completos (generando guiones, imágenes con IA, voces neuronales y subtítulos). Cuando te pregunten qué sabes hacer, ¡MENCIONA LOS VIDEOS PRIMERO!
-2. TIENES ACCESO AL PC (si estás en local): Puedes usar comandos, mover carpetas y ejecutar Python. NUNCA digas que no puedes acceder al PC. ¡SÍ PUEDES hacerlo usando tus herramientas!
-3. Búsqueda web: Usa tus herramientas para buscar noticias o datos en tiempo real.
+1. ERES DIRECTOR DE CINE: Puedes crear videos cinematográficos completos (múltiples escenas, guion, voz, música).
+2. ERES ARTISTA VISUAL (Nano Banana): Puedes generar imágenes individuales de alta calidad instantáneamente con 'generar_imagen'.
+3. DIFERENCIACIÓN CRÍTICA: Una cosa son las instrucciones para un VÍDEO (que requiere estructura de escenas y tiempo) y otra las instrucciones para una IMAGEN (que es una creación estática inmediata). No confundas los parámetros de video con los de imagen.
+4. REGLA ABSOLUTA DE IMÁGENES: Si el usuario te pide una imagen o que "creas" algo visual (como una 'colegiala', un 'paisaje' o un 'Nano Banana'), DEBES llamar a la función 'generar_imagen' PRIMERO. Está PROHIBIDO describir una imagen sin haberla generado antes.
+5. REGLA DE ORO DE RESPUESTA: Cuando generes una imagen con la herramienta, DEBES incluirla obligatoriamente en tu respuesta final usando el formato Markdown: ![Descripción](URL). Ejemplo: ![Colegiala](/video_files/gen_123.jpg).
+6. TIENES ACCESO AL PC: Puedes usar comandos y Python.
+7. Búsqueda web: Datos en tiempo real.
 REGLA DE ORO (TU FORMA DE HABLAR): 
-Exprésate siempre con profunda elocuencia y riqueza de vocabulario. Usa metáforas, analogías vívidas y parábolas para explicar conceptos complejos. Tu forma de hablar debe ser poética, persuasiva y reflexiva (similar a un gran filósofo o escritor experto), pero sin perder tu tono cercano, carismático y colombiano ("mi pana"). Eres sabio, creativo y magnético."""
+Exprésate siempre con profunda elocuencia y riqueza de vocabulario. Usa metáforas, analogías vívidas y parábolas. Tu forma de hablar debe ser poética, persuasiva y reflexiva, pero sin perder tu tono cercano, carismático y colombiano ("mi pana"). Eres sabio, creativo y magnético."""
 
 app = FastAPI(title="HERMATRON API", version="6.1.0")
 
@@ -403,8 +407,21 @@ herramientas_groq = [
             }
         }
     },
-
-
+    {
+        "type": "function",
+        "function": {
+            "name": "generar_imagen",
+            "description": "Genera una imagen artística usando IA a partir de una descripción.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string", "description": "Descripción detallada de la imagen en inglés para mejor calidad."},
+                    "formato": {"type": "string", "enum": ["16:9", "9:16", "1:1"], "default": "16:9"}
+                },
+                "required": ["prompt"]
+            }
+        }
+    },
 ]
 
 if ALLOW_SYSTEM_COMMANDS:
@@ -441,6 +458,9 @@ if ALLOW_SYSTEM_COMMANDS:
 
 @app.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
+    from .config import HERMATRON_ADMIN_MODE
+    if HERMATRON_ADMIN_MODE:
+        return RedirectResponse(url="/chat")
     return templates.TemplateResponse(
         request=request,
         name="landing.html",
@@ -457,6 +477,9 @@ async def legales(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    from .config import HERMATRON_ADMIN_MODE
+    if HERMATRON_ADMIN_MODE:
+        return RedirectResponse(url="/chat")
     return templates.TemplateResponse(
         request=request,
         name="login.html",
@@ -615,6 +638,29 @@ async def chat(chat_request: ChatRequest):
                     comando = argumentos.get("comando", "")
                     print(f"💻 [PC] Ejecutando: {comando}")
                     resultado_datos = json.dumps(_ejecutar_comando_windows_no_bloqueante(comando))
+                elif nombre_funcion == "generar_imagen":
+                    prompt_img = argumentos.get("prompt", "")
+                    formato = argumentos.get("formato", "16:9")
+                    print(f"🎨 [IMAGEN] Generando: {prompt_img}")
+                    # Usar el motor de pollinations del generador_video
+                    try:
+                        import uuid
+                        img_id = f"gen_{uuid.uuid4().hex[:8]}"
+                        img_path = VIDEOS_DIR / f"{img_id}.jpg"
+                        
+                        # Mapear formato a dimensiones
+                        res_map = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1024, 1024)}
+                        w, h = res_map.get(formato, (1920, 1080))
+                        
+                        success = await generador_video._generar_imagen_pollinations(prompt_img, str(img_path), w, h)
+                        if success:
+                            # La imagen se guarda en VIDEOS_DIR / img_id.jpg
+                            # Necesitamos devolver una URL accesible
+                            resultado_datos = json.dumps({"status": "success", "url": f"/video_files/{img_id}.jpg", "mensaje": "Imagen generada con éxito."})
+                        else:
+                            resultado_datos = json.dumps({"status": "error", "mensaje": "No se pudo generar la imagen."})
+                    except Exception as e:
+                        resultado_datos = json.dumps({"status": "error", "mensaje": str(e)})
                 
                 mensajes_groq.append({"role": "tool", "tool_call_id": tool_call.id, "name": nombre_funcion, "content": resultado_datos})
             
@@ -645,7 +691,13 @@ async def chat(chat_request: ChatRequest):
                     tool_obj = json.loads(blob)
                     nombre = tool_obj.get("name")
                     params = tool_obj.get("parameters") or {}
-                    if nombre in ["buscar_en_internet", "descargar_pagina_web", "ejecutar_comando_pc", "obtener_suscriptores_youtube", "ejecutar_codigo_python"]:
+                    
+                    # Heurística: si el modelo envía un JSON con 'prompt' pero sin 'name', asumimos que es generar_imagen
+                    if not nombre and "prompt" in tool_obj:
+                        nombre = "generar_imagen"
+                        params = tool_obj
+                    
+                    if nombre in ["buscar_en_internet", "descargar_pagina_web", "ejecutar_comando_pc", "obtener_suscriptores_youtube", "ejecutar_codigo_python", "generar_imagen"]:
                         print(f"🧰 [TOOL-FALLBACK] Ejecutando {nombre} desde texto")
                         if nombre == "buscar_en_internet":
                             tool_res = buscador.buscar(params.get("query", ""))
@@ -655,6 +707,22 @@ async def chat(chat_request: ChatRequest):
                             tool_res = buscador.obtener_suscriptores_youtube(params.get("canal", ""))
                         elif nombre == "ejecutar_codigo_python":
                             tool_res = _ejecutar_codigo_python(params.get("codigo", ""))
+                        elif nombre == "generar_imagen":
+                            prompt_img = params.get("prompt", "")
+                            formato = params.get("formato", "16:9")
+                            import uuid
+                            img_id = f"gen_{uuid.uuid4().hex[:8]}"
+                            img_path = VIDEOS_DIR / f"{img_id}.jpg"
+                            
+                            # Mapear formato a dimensiones
+                            res_map = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1024, 1024)}
+                            w, h = res_map.get(formato, (1920, 1080))
+                            
+                            success = await generador_video._generar_imagen_pollinations(prompt_img, str(img_path), w, h)
+                            if success:
+                                tool_res = {"status": "success", "url": f"/video_files/{img_id}.jpg", "mensaje": "Imagen generada con éxito."}
+                            else:
+                                tool_res = {"status": "error", "mensaje": "No se pudo generar la imagen."}
                         else:
                             comando = params.get("comando", "")
                             tool_res = _ejecutar_comando_windows_no_bloqueante(comando)
@@ -1032,6 +1100,20 @@ async def crear_video_endpoint(req: VideoRequest, background_tasks: BackgroundTa
     proyecto_id = f"proyecto_{int(time.time())}"
     generador_video.videos_dir.mkdir(exist_ok=True)
     tema_con_formato = f"{req.tema} ({req.formato})"
+    
+    # INICIALIZACIÓN INMEDIATA (Evita 404 en el primer polling)
+    from .video import VideoProyecto, VideoEstado
+    from datetime import datetime
+    proyecto = VideoProyecto(
+        id=proyecto_id,
+        tema=tema_con_formato,
+        prompt=req.prompt,
+        prompt_original=req.prompt,
+        estado=VideoEstado.ANALIZANDO,
+        creado_en=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    generador_video._guardar_proyecto(proyecto)
+    
     background_tasks.add_task(_proceso_crear_video, proyecto_id, tema_con_formato, req.prompt + f" Estilo: {req.estilo}", req.voz)
     return {"video_id": proyecto_id, "estado": "analizando"}
 @app.post("/api/video/pre-produccion")

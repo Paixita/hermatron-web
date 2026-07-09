@@ -21,8 +21,10 @@ from utils.ffmpeg_helper import crear_clip_imagen, concatenar_segmentos
 from app.config import (
     BASE_DIR, PEXELS_API_KEY, ELEVENLABS_API_KEY, UNSPLASH_ACCESS_KEY,
     TRANSLATION_CACHE_TTL, MAX_IN_MEMORY_DURATION, IMAGE_RESOLUTIONS,
-    TRANSLATION_CACHE_PATH, GROQ_MODEL
+    TRANSLATION_CACHE_PATH, GROQ_MODEL, GOOGLE_API_KEY, GEMINI_SAFETY_MODE
 )
+from google import genai
+from google.genai import types
 
 
 # --- DIRECTORIO DE VIDEOS ---
@@ -776,6 +778,7 @@ Responde SOLO JSON:
             escena_dir = work_dir / f"escena_{num_escena}"
             escena_dir.mkdir(exist_ok=True)
             img_path = escena_dir / "imagen.png"
+            video_path = escena_dir / "video.mp4"
 
             # Construir un prompt robusto con PREFIJO DE ESTILO CONSISTENTE
             descripcion = escena.get("descripcion_visual", "")
@@ -783,26 +786,60 @@ Responde SOLO JSON:
             
             # El style_prefix va primero para que Pollinations lo priorice
             query_mejorado = f"{style_prefix}, {descripcion}, {query}, highly detailed, masterpiece, 8k resolution, cinematic lighting"
-            print(f"[VIDEO]  Generando con IA (Pollinations): {query_mejorado[:80]}...")
             
             width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
-            exito = await self._generar_imagen_pollinations(query_mejorado, str(img_path), width, height, seed=project_seed)
-            if exito:
-                fuente_usada = "pollinations"
-                # Actualizar el path en la escena del proyecto
+            
+            exito_imagen = False
+            
+            # Intentar generar imagen base con Gemini
+            if GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
+                print(f"[VIDEO] Generando imagen base con Gemini (Nano Banana) para escena {num_escena}...")
+                exito_imagen = await self._generar_imagen_gemini(query_mejorado, str(img_path), width, height)
+            
+            # Fallback a Pollinations para imagen base
+            if not exito_imagen:
+                print(f"[VIDEO] Generando imagen base con Pollinations para escena {num_escena}...")
+                exito_imagen = await self._generar_imagen_pollinations(query_mejorado, str(img_path), width, height, seed=project_seed)
+                if exito_imagen:
+                    fuente_usada = "pollinations"
+                else:
+                    print(f"[VIDEO] Fallback total a Placeholder para escena {num_escena}")
+                    await self._generar_imagen_placeholder(
+                        str(img_path), escena.get("descripcion_visual", f"Escena {num_escena}"),
+                        indice=i, total=total, query=query
+                    )
+                    exito_imagen = True
+                    fuente_usada = "placeholder"
+            
+            exito_video = False
+            mochi_space = os.getenv("MOCHI_HF_SPACE")
+            
+            # 1. Intentar Mochi 1 Image-to-Video si está configurado
+            if mochi_space and exito_imagen and fuente_usada != "placeholder":
+                print(f"[VIDEO] Intentando animar imagen base con Mochi 1 I2V para escena {num_escena}...")
+                exito_video = await self._generar_video_mochi(query_mejorado, str(img_path), str(video_path))
+                if exito_video:
+                    fuente_usada = "mochi"
+                    for e_orig in proyecto.escenas_disenadas:
+                        if e_orig.get("numero") == num_escena:
+                            e_orig["imagen_path"] = str(video_path)
+            
+            # 2. Intentar Google Veo 3.1 Text-to-Video
+            if not exito_video and GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
+                print(f"[VIDEO] Intentando generar video con Veo 3.1 para escena {num_escena}...")
+                exito_video = await self._generar_video_veo(query_mejorado, str(video_path), width, height)
+                if exito_video:
+                    fuente_usada = "veo"
+                    for e_orig in proyecto.escenas_disenadas:
+                        if e_orig.get("numero") == num_escena:
+                            e_orig["imagen_path"] = str(video_path)
+            
+            # 3. Si no hay video, usar la imagen estática generada
+            if not exito_video:
                 for e_orig in proyecto.escenas_disenadas:
                     if e_orig.get("numero") == num_escena:
                         e_orig["imagen_path"] = str(img_path)
-            else:
-                print(f"[VIDEO]  Fallback Placeholder para escena {num_escena}")
-                await self._generar_imagen_placeholder(
-                    str(img_path), escena.get("descripcion_visual", f"Escena {num_escena}"),
-                    indice=i, total=total, query=query
-                )
-                for e_orig in proyecto.escenas_disenadas:
-                    if e_orig.get("numero") == num_escena:
-                        e_orig["imagen_path"] = str(img_path)
-
+            
             # Guardar metadata (SIEMPRE, sin importar la fuente)
             with open(escena_dir / "metadata.json", "w", encoding="utf-8") as f:
                 json.dump({
@@ -829,11 +866,171 @@ Responde SOLO JSON:
         import gc
         gc.collect()
 
+    async def _generar_video_mochi(self, prompt: str, imagen_path: str, ruta_salida: str) -> bool:
+        """
+        Generación de vídeo usando el modelo Mochi 1 desplegado en Hugging Face Spaces (vía Gradio Client).
+        """
+        mochi_space = os.getenv("MOCHI_HF_SPACE")
+        hf_token = os.getenv("HF_TOKEN")
+        
+        if not mochi_space:
+            return False
+            
+        try:
+            print(f"[MOCHI] Conectando a Hugging Face Space: {mochi_space}...")
+            import shutil
+            from gradio_client import Client, handle_file
+            
+            client = Client(mochi_space, hf_token=hf_token)
+            img_handler = handle_file(imagen_path)
+            
+            print(f"[MOCHI] Generando video desde imagen: {imagen_path}...")
+            
+            try:
+                # Intento 1: Parámetros estándar de Mochi-1 I2V (prompt, image, seed, cfg, steps)
+                result = await asyncio.to_thread(
+                    client.predict,
+                    prompt,
+                    img_handler,
+                    12345, # seed
+                    4.5,   # cfg
+                    30,    # steps
+                    api_name="/predict"
+                )
+            except Exception as e1:
+                print(f"[MOCHI] Intento 1 falló ({e1}), intentando solo prompt e imagen...")
+                try:
+                    # Intento 2: Solo prompt e imagen
+                    result = await asyncio.to_thread(
+                        client.predict,
+                        prompt,
+                        img_handler,
+                        api_name="/predict"
+                    )
+                except Exception as e2:
+                    print(f"[MOCHI] Intento 2 falló ({e2}), intentando sin api_name...")
+                    result = await asyncio.to_thread(
+                        client.predict,
+                        prompt,
+                        img_handler
+                    )
+            
+            video_temp_path = None
+            if isinstance(result, str) and result.endswith(('.mp4', '.webm')):
+                video_temp_path = result
+            elif isinstance(result, (list, tuple)) and len(result) > 0:
+                for item in result:
+                    if isinstance(item, str) and item.endswith(('.mp4', '.webm')):
+                        video_temp_path = item
+                        break
+            
+            if video_temp_path and os.path.exists(video_temp_path):
+                shutil.copy2(video_temp_path, ruta_salida)
+                print(f"[MOCHI] Vídeo generado exitosamente y guardado en: {ruta_salida}")
+                return True
+                
+            print(f"[MOCHI] No se pudo encontrar el video en el resultado: {result}")
+            return False
+            
+        except Exception as e:
+            print(f"[MOCHI] Error llamando a Mochi 1 API: {e}")
+            return False
+
+    async def _generar_imagen_gemini(self, prompt: str, ruta_salida: str, width: int = 1024, height: int = 1024) -> bool:
+        """
+        Generación de imagen premium usando Nano Banana 2 (Gemini 3.1 Flash Image).
+        """
+        if not GOOGLE_API_KEY or GEMINI_SAFETY_MODE:
+            if GEMINI_SAFETY_MODE:
+                print("[SAFETY] Gemini saltado por Modo de Seguridad Activo.")
+            return False
+            
+        try:
+            print(f"[GEMINI] Generando imagen {width}x{height} con Nano Banana 2...")
+            client = genai.Client(api_key=GOOGLE_API_KEY)
+            
+            # Añadir pista de aspecto al prompt para el modelo
+            ar_hint = "portrait aspect ratio, 9:16, vertical" if height > width else "landscape aspect ratio, 16:9, horizontal"
+            if width == height: ar_hint = "square aspect ratio, 1:1"
+            
+            prompt_with_ar = f"{prompt}. Note: Generate in {ar_hint}."
+            
+            # Modelo específico de 2026 para generación de imágenes
+            # Pedimos específicamente modalidad IMAGE
+            response = await client.aio.models.generate_content(
+                model="gemini-3.1-flash-image-preview",
+                contents=prompt_with_ar,
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE"]
+                )
+            )
+            
+            # Extraer los bytes de la imagen de la respuesta
+            if response.candidates and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        with open(ruta_salida, "wb") as f:
+                            f.write(part.inline_data.data)
+                        print(f"[GEMINI] Imagen generada exitosamente ({len(part.inline_data.data)//1024} KB)")
+                        return True
+            
+            return False
+        except Exception as e:
+            print(f"[GEMINI] Error en generación de imagen: {e}")
+            return False
+
+    async def _generar_video_veo(self, prompt: str, ruta_salida: str, width: int = 1920, height: int = 1080) -> bool:
+        """
+        Generación de vídeo ultra-cinemático usando Google Veo 3.1.
+        (Experimental - Requiere plan de pago en AI Studio)
+        """
+        if not GOOGLE_API_KEY or GEMINI_SAFETY_MODE:
+            if GEMINI_SAFETY_MODE:
+                print("[SAFETY] Google Veo saltado por Modo de Seguridad Activo.")
+            return False
+            
+        try:
+            print(f"[VEO] Generando clip de vídeo de 10s con Veo 3.1...")
+            client = genai.Client(api_key=GOOGLE_API_KEY)
+            
+            ar = "16:9"
+            if height > width: ar = "9:16"
+            elif width == height: ar = "1:1"
+            
+            # Veo usa predict_long_running porque toma tiempo generar vídeo
+            # Google Veo 3.1 en AI Studio admite de 4 a 8 segundos
+            operation = await client.aio.models.generate_videos(
+                model="veo-3.1-generate-preview",
+                prompt=prompt,
+                config={
+                    'duration_seconds': 8,
+                    'aspect_ratio': ar
+                }
+            )
+            
+            # Esperar a que la operación termine
+            # (En producción esto debería ser asíncrono/webhook, pero para prueba esperamos)
+            print(f"[VEO] Vídeo en proceso (ID: {operation.name})...")
+            result = await operation.wait_for_result()
+            
+            if result.generated_videos:
+                video_bytes = result.generated_videos[0].video.video_bytes
+                with open(ruta_salida, "wb") as f:
+                    f.write(video_bytes)
+                print(f"[VEO] Vídeo generado exitosamente ({len(video_bytes)//1024} KB)")
+                return True
+                
+            return False
+        except Exception as e:
+            print(f"[VEO] Error en generación de vídeo: {e}")
+            return False
+
     async def _generar_imagen_pollinations(self, query: str, ruta_salida: str, width: int = 2560, height: int = 1440, seed: int = None) -> bool:
         """
-        Cadena de fuentes de imágenes (orden: velocidad + confiabilidad):
-        1. Pollinations.ai — IA gratis con seed compartido para coherencia
-        2. Picsum Photos — siempre disponible, sin API key
+        Cadena de fuentes de imágenes (orden: calidad + confiabilidad):
+        1. Gemini 3.1 Flash Image (Nano Banana 2) — Premium / Gratis AI Studio
+        2. Pollinations.ai — IA gratis con seed compartido para coherencia
+        3. Picsum Photos — siempre disponible, sin API key
         """
         import httpx
         import urllib.parse
@@ -844,6 +1041,14 @@ Responde SOLO JSON:
 
         # ── OPTIMIZACIÓN DE PROMPT (Director de Arte IA) ──
         query_opt = await self._optimizar_prompt_imagen(query_limpio, width, height)
+        
+        # ── FUENTE 0: Google Gemini 3.1 Flash Image (Nano Banana 2) ──
+        if GOOGLE_API_KEY:
+            exito_gemini = await self._generar_imagen_gemini(query_opt, ruta_salida, width, height)
+            if exito_gemini:
+                return True
+            print("[IMAGENES] Gemini falló, intentando Pollinations...")
+
         query_cod = urllib.parse.quote(query_opt)
         
         # ── FUENTE 1: Pollinations.ai (IA Generativa Principal) ──
@@ -1163,23 +1368,94 @@ Responde SOLO JSON:
             return False, str(e)
 
 
+    def _crear_clip_segmento(self, recurso_path: str, duracion: float, w: int, h: int, out_path: str, fps: int = 30, i: int = 0) -> bool:
+        """
+        Crea un segmento de video de FFmpeg a partir de una imagen (con zoompan) o de un video (en bucle y redimensionado).
+        """
+        recurso_path_obj = Path(recurso_path)
+        is_video = recurso_path_obj.suffix.lower() in ('.mp4', '.avi', '.mov', '.mkv', '.webm')
+        
+        if is_video:
+            # Video: hacemos un loop infinito del recurso, lo recortamos a la duración exacta y ajustamos escala/crop
+            cmd = [
+                "ffmpeg", "-y",
+                "-stream_loop", "-1",
+                "-i", recurso_path,
+                "-t", f"{duracion:.4f}",
+                "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},format=yuv420p,fps={fps}",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
+                "-an",
+                out_path
+            ]
+            ok, err = self._run_ffmpeg(cmd)
+            return ok and Path(out_path).exists()
+        else:
+            # Imagen: zoompan estabilizado Ken Burns
+            d_frames = int(duracion * fps)
+            d_frames_safe = d_frames + 10
+            if i % 2 == 0:
+                zoom_expr = "zoom+0.0006"
+            else:
+                zoom_expr = "if(eq(on,1),1.1,max(1.0006,zoom-0.0006))"
+                
+            if h > w: # Vertical
+                vf_zoom = (
+                    f"scale=1080:1920:force_original_aspect_ratio=increase,"
+                    f"crop=1080:1920,"
+                    f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
+                    f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1080x1920:fps={fps},"
+                    f"scale={w}:{h}"
+                )
+            else: # Horizontal
+                vf_zoom = (
+                    f"scale=1920:1080:force_original_aspect_ratio=increase,"
+                    f"crop=1920:1080,"
+                    f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
+                    f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1920x1080:fps={fps},"
+                    f"scale={w}:{h}"
+                )
+            cmd_clip = [
+                "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.4f}",
+                "-i", recurso_path, "-vf", vf_zoom,
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                "-t", f"{duracion:.4f}", out_path
+            ]
+            ok, err = self._run_ffmpeg(cmd_clip)
+            if ok and Path(out_path).exists():
+                return True
+            else:
+                # Fallback estático simple
+                cmd_st = [
+                    "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.3f}",
+                    "-i", recurso_path,
+                    "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                    "-t", f"{duracion:.3f}", out_path
+                ]
+                ok_st, err_st = self._run_ffmpeg(cmd_st)
+                return ok_st and Path(out_path).exists()
+
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
                                 audio_path: Optional[str], escenas: list, resolucion: str = "1080") -> Optional[str]:
         """Ensamblar video con Ken Burns zoom + subtítulos sincronizados (FFmpeg nativo)"""
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
+        proyecto = self._cargar_proyecto(proyecto_id)
 
-        # ── Recopilar imágenes ────────────────────────────────────────
+        # ── Recopilar recursos (imágenes o videos de Veo) ─────────────────────────────
         imagenes = []
         for i, escena in enumerate(escenas):
             num_escena = escena.get("numero", i + 1)
-            img = work_dir / f"escena_{num_escena}" / "imagen.jpg"
-            if not img.exists():
-                img = work_dir / f"escena_{num_escena}" / "imagen.png"
-            if img.exists():
-                imagenes.append((str(img), escena.get("texto_narracion", "")))
+            # Primero ver si existe un clip de video
+            rec = work_dir / f"escena_{num_escena}" / "video.mp4"
+            if not rec.exists():
+                rec = work_dir / f"escena_{num_escena}" / "imagen.jpg"
+            if not rec.exists():
+                rec = work_dir / f"escena_{num_escena}" / "imagen.png"
+            if rec.exists():
+                imagenes.append((str(rec), escena.get("texto_narracion", "")))
 
         if not imagenes:
-            print("[VIDEO] Sin imágenes")
+            print("[VIDEO] Sin recursos visuales (imágenes ni videos)")
             return None
 
         print(f"[VIDEO] Ensamblando {len(imagenes)} escenas con zoom + SRT a {resolucion}p...")
@@ -1213,8 +1489,6 @@ Responde SOLO JSON:
             if dur_total > MAX_IN_MEMORY_DURATION:
                 print(f"[VIDEO] Duración ({dur_total:.1f}s) excede umbral ({MAX_IN_MEMORY_DURATION}s). Usando streaming helper.")
                 
-                # Obtener resolución del proyecto
-                proyecto = self._cargar_proyecto(proyecto_id)
                 width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
                 
                 clips_streaming = []
@@ -1226,7 +1500,7 @@ Responde SOLO JSON:
                     
                     dur_escena = duraciones_escenas[i]
                     clip_path = work_dir / f"clip_stream_{i:02d}.mp4"
-                    await asyncio.to_thread(crear_clip_imagen, img_path, dur_escena, width, height, str(clip_path))
+                    await asyncio.to_thread(self._crear_clip_segmento, img_path, dur_escena, width, height, str(clip_path), 30, i)
                     clips_streaming.append(str(clip_path))
                 
                 # Concatenar y aplicar audio
@@ -1256,16 +1530,18 @@ Responde SOLO JSON:
             width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
             w, h = width, height
             # Forzar detección robusta: si el tema dice vertical o el usuario eligió 9:16
-            if "9:16" in (proyecto.tema or "").lower() or "vertical" in (proyecto.tema or "").lower() or "reels" in (proyecto.tema or "").lower():
-                w, h = height, width if height < width else (width, height)
-                # Asegurar que h sea mayor que w para vertical
-                if w > h: w, h = h, w
+            is_vertical = any(kw in (proyecto.tema or "").lower() for kw in ["9:16", "9/16", "vertical", "tiktok", "reels", "shorts"])
+            
+            if is_vertical:
+                # Asegurar proporciones verticales (h > w)
+                w, h = (min(width, height), max(width, height))
             else:
-                if w < h: w, h = h, w
+                # Asegurar proporciones horizontales (w > h)
+                w, h = (max(width, height), min(width, height))
 
             fps = 30  # Subido a 30 para evitar el efecto de 'tildarse' (lag)
 
-            # ── PASO 1: clip por escena con Ken Burns ─────────────────
+            # ── PASO 1: clip por escena con Ken Burns / Video loop ─────────────────
             clips = []
             total_escenas = len(imagenes)
 
@@ -1276,55 +1552,13 @@ Responde SOLO JSON:
                 
                 dur_escena = duraciones_escenas[i]
                 dur_clip = dur_escena + 1.0 # Colchón de 1 segundo para evitar cortes
-                d_frames = int(dur_clip * fps)
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
                 
-                # Zoom estabilizado con OVERSAMPLING
-                if i % 2 == 0:
-                    zoom_expr = "zoom+0.0006"
-                else:
-                    zoom_expr = "if(eq(on,1),1.1,max(1.0006,zoom-0.0006))"
-                
-                d_frames_safe = d_frames + 10
-                
-                if h > w: # Vertical (Shorts/TikTok)
-                    canvas_w, canvas_h = 1080, 1920
-                    vf_zoom = (
-                        f"scale=1080:1920:force_original_aspect_ratio=increase,"
-                        f"crop=1080:1920,"
-                        f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
-                        f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1080x1920:fps={fps},"
-                        f"scale={w}:{h}"
-                    )
-                else: # Horizontal (YouTube)
-                    canvas_w, canvas_h = 1920, 1080
-                    vf_zoom = (
-                        f"scale=1920:1080:force_original_aspect_ratio=increase,"
-                        f"crop=1920:1080,"
-                        f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
-                        f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1920x1080:fps={fps},"
-                        f"scale={w}:{h}"
-                    )
-                cmd_clip = [
-                    "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_clip:.4f}",
-                    "-i", img_path, "-vf", vf_zoom,
-                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                    "-t", f"{dur_clip:.4f}", str(clip_path)
-                ]
-                ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_clip)
-                if ok and clip_path.exists():
+                ok = await asyncio.to_thread(self._crear_clip_segmento, img_path, dur_clip, w, h, str(clip_path), fps, i)
+                if ok:
                     clips.append(str(clip_path))
                 else:
-                    print(f"[VIDEO] zoompan falló escena {i} → estática: {err[:80]}")
-                    cmd_st = [
-                        "ffmpeg", "-y", "-loop", "1", "-t", f"{dur_escena:.3f}",
-                        "-i", img_path,
-                        "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}",
-                        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                        "-t", f"{dur_escena:.3f}", str(clip_path)
-                    ]
-                    ok2, _ = await asyncio.to_thread(self._run_ffmpeg, cmd_st)
-                    if ok2: clips.append(str(clip_path))
+                    print(f"[VIDEO] Fallo crítico ensamblando escena {i}")
 
             if not clips:
                 print("[VIDEO] No se generó ningún clip"); return None
@@ -1634,32 +1868,39 @@ Responde SOLO JSON:
         # Intentar traducción
         print(f"[TRAD] Traduciendo: {prompt[:30]}...")
         translated = prompt
-        try:
-            # 1. Google Translate
-            client_tr = translate.Client()
-            result = client_tr.translate(prompt, target_language="en")
-            translated = result["translatedText"]
-            print("[TRAD] Google Translate OK")
-        except Exception as e:
-            print(f"[TRAD] Google Translate falló: {e}. Usando fallback Groq.")
+        
+        # Si el modo seguridad está activo, saltamos Google Translate (GCP)
+        if GEMINI_SAFETY_MODE:
+            print("[SAFETY] Saltando Google Translate por Modo de Seguridad.")
+        else:
             try:
-                # 2. Fallback Groq
-                from app.config import GROQ_API_KEY
-                if GROQ_API_KEY:
-                    import groq
-                    client_g = groq.AsyncGroq(api_key=GROQ_API_KEY)
-                    resp = await client_g.chat.completions.create(
-                        model=GROQ_MODEL,
-                        messages=[
-                            {"role": "system", "content": "Translate the following Spanish text to English. Output only the translated text, no comments."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.0
-                    )
-                    translated = resp.choices[0].message.content.strip()
-                    print("[TRAD] Fallback Groq OK")
-            except Exception as e2:
-                print(f"[TRAD] Fallback Groq falló: {e2}")
+                # 1. Google Translate
+                client_tr = translate.Client()
+                result = client_tr.translate(prompt, target_language="en")
+                translated = result["translatedText"]
+                print("[TRAD] Google Translate OK")
+                return translated
+            except Exception as e:
+                print(f"[TRAD] Google Translate falló: {e}. Usando fallback Groq.")
+
+        try:
+            # 2. Fallback Groq
+            from app.config import GROQ_API_KEY
+            if GROQ_API_KEY:
+                import groq
+                client_g = groq.AsyncGroq(api_key=GROQ_API_KEY)
+                resp = await client_g.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=[
+                        {"role": "system", "content": "Translate the following Spanish text to English. Output only the translated text, no comments."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.0
+                )
+                translated = resp.choices[0].message.content.strip()
+                print("[TRAD] Fallback Groq OK")
+        except Exception as e2:
+            print(f"[TRAD] Fallback Groq falló: {e2}")
 
         # Guardar en caché
         self.translation_cache[prompt] = {

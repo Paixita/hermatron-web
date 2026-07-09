@@ -2814,3 +2814,83 @@ input:checked + .slider:before {
         font-size: 1.2rem;
     }
 }
+
+/* ===== BOTÓN NANO BANANA PREMIUM ===== */
+.btn-nano {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%) !important;
+    color: #000 !important;
+    font-size: 1.4rem !important;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50% !important;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.4) !important;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    margin: 0 5px;
+}
+
+.btn-nano:hover {
+    transform: scale(1.2) rotate(15deg) !important;
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.7), 0 0 50px rgba(255, 215, 0, 0.3) !important;
+    filter: brightness(1.1);
+}
+
+.btn-nano:active {
+    transform: scale(0.95);
+}
+
+/* Animación de entrada para el botón */
+#btnNanoBanana {
+    animation: bounceIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes bounceIn {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* ===== IMÁGENES EN MENSAJES ===== */
+.mensaje-imagen {
+    margin-top: 12px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--borde);
+    box-shadow: var(--shadow-md);
+    transition: transform 0.3s ease;
+}
+
+.mensaje-imagen img {
+    width: 100%;
+    max-width: 500px;
+    height: auto;
+    display: block;
+    cursor: zoom-in;
+}
+
+.mensaje-imagen:hover {
+    transform: scale(1.02);
+    border-color: var(--accent-primary);
+}
+
+/* ===== BOTÓN MICRÓFONO (DICTADO) ===== */
+.btn-mic {
+    transition: all 0.3s ease !important;
+}
+
+.btn-mic.grabando {
+    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.15) !important;
+    animation: pulseRed 1.5s infinite !important;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4) !important;
+    border-radius: 50%;
+}
+
+@keyframes pulseRed {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}

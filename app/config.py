@@ -15,6 +15,8 @@ load_dotenv(BASE_DIR / ".env")
 # Configuración de Groq
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+GEMINI_SAFETY_MODE = os.getenv("GEMINI_SAFETY_MODE", "True").lower() == "true"
 
 # Configuración de OpenRouter (proveedor alternativo con +200 modelos)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
