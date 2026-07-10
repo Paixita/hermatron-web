@@ -881,7 +881,7 @@ Responde SOLO JSON:
             import shutil
             from gradio_client import Client, handle_file
             
-            client = Client(mochi_space, hf_token=hf_token)
+            client = Client(mochi_space, token=hf_token)
             img_handler = handle_file(imagen_path)
             
             print(f"[MOCHI] Generando video desde imagen: {imagen_path}...")
