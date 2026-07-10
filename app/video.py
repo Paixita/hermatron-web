@@ -326,30 +326,36 @@ Cada escena debe seguir este orden lógico para las descripciones visuales:
 - Si es Anime: "Professional Anime illustration, [Sujeto], sharp lines, cel-shaded, cinematic background art, Makoto Shinkai style, high contrast, 4k."
 
 🚫 REGLAS DE ORO (Evitar Descoordinación):
-- CERO AMBIGÜEDAD: Define sujetos específicos (ej: "un hombre elegante de 30 años con traje italiano").
+- FICHA DE PERSONAJES OBLIGATORIA (CONSISTENCIA DE RAZA Y ASPECTO):
+  * Julián (Protagonista): Siempre debe ser de raza negra (Afrocolombiano/black), cabello negro corto y muy rizado. De niño (8 años): mirada inocente, ropa sencilla de barrio. De adulto: joven atlético de raza negra.
+  * Hamilton: Joven elegante de raza negra (Afrocolombiano/black), cabello negro corto y rizado, con ojos claros distintivos (verdes o avellana).
+  * El Zarco: Joven colombiano trigueño o mulato, ojos claros muy intensos (azules o verdes), aspecto urbano y mirada desafiante.
+  * Carlos (papá), Rosalba (mamá), Vanessa y Valentina (hermanas): Todos son de raza negra (Afrocolombianos/black).
+- CERO AMBIGÜEDAD: Define sujetos específicos en cada escena (ej: "8-year-old Afro-Colombian black boy Julian, short curly hair...").
+- ACCIÓN Y MOVIMIENTO EN EL PROMPT: El prompt visual debe describir una acción o movimiento real en progreso (ej: "Julian is speaking and moving his hands", "Julian is walking along the street"). No describas escenas estáticas.
 - CONSISTENCIA DE PERSONAJE: Describe rasgos físicos inalterables para que no cambien entre escenas.
 - IDIOMA: Los campos técnicos (descripcion_visual) deben estar en INGLÉS para máxima compatibilidad con modelos de difusión.
-- PROHIBIDO EL ABSTRACTISMO: No uses auroras o galaxias para temas humanos. Muestra situaciones REALES y LITERALES.
+- PROHIBIDO EL ABSTRACTISMO: Muestra situaciones REALES y LITERALES.
 - DURACIÓN: Genera entre 10 y 15 escenas. Cada 'texto_narracion' debe tener entre 60 y 100 palabras.
 
 Responde SOLO con JSON válido, sin markdown:
-{{
+{
     "guion_completo": "texto completo del guión narrativo (800+ palabras)",
     "escenas": [
-        {{
+        {
             "numero": 1,
             "titulo": "Apertura impactante",
             "texto_narracion": "Escribe aquí MÍNIMO 60 palabras de narración profesional...",
-            "descripcion_visual": "[Sujeto], [Estilo], [Cámara], [Iluminación], [Calidad] (EN INGLÉS)",
+            "descripcion_visual": "[Sujeto con descripción física de raza y ropa], [Estilo y Acción/Movimiento activo en progreso], [Cámara], [Iluminación], [Calidad] (EN INGLÉS)",
             "angulo_camara": "...",
             "iluminacion": "...",
             "paleta_colores": "...",
             "movimiento": "...",
             "emocion": "...",
             "query_pexels": "..."
-        }}
+        }
     ]
-}}
+}
 """
         user_prompt = f"""
 TEMA: {proyecto.tema}
