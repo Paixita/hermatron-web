@@ -1424,6 +1424,7 @@ Responde SOLO JSON:
             if ok and Path(out_path).exists():
                 return True
             else:
+                print(f"[FFMPEG PRIMARY ERR] {err}")
                 # Fallback estático simple
                 cmd_st = [
                     "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.3f}",
@@ -1433,6 +1434,8 @@ Responde SOLO JSON:
                     "-t", f"{duracion:.3f}", out_path
                 ]
                 ok_st, err_st = self._run_ffmpeg(cmd_st)
+                if not ok_st:
+                    print(f"[FFMPEG FALLBACK ERR] {err_st}")
                 return ok_st and Path(out_path).exists()
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
