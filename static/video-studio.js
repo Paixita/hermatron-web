@@ -382,24 +382,30 @@ async function crearVideoDesdeStudio() {
                 if (progData.estado === 'generando_imagenes' || pct < 80) {
                     progresoEstado.innerHTML = `📸 <strong>Fase 1:</strong> Creando imágenes multimedia...`;
                     progresoFill.style.background = '#6f42c1';
-                } 
+                } else if (pct >= 80 && pct < 90) {
+                    progresoEstado.innerHTML = `🎙️ <strong>Fase 2:</strong> Creando la voz superpuesta...`;
+                    progresoFill.style.background = '#fd7e14';
+                } else if (pct >= 90 && pct < 100) {
+                    progresoEstado.innerHTML = `🎞️ <strong>Fase 3:</strong> Ensamblando escenas y video...`;
+                    progresoFill.style.background = '#17a2b8';
+                }
                 
-                // Si el servidor indica que las imágenes están listas para revisión
-                if (progData.estado === 'en_review' || progData.estado === 'listo_para_revision' || (pct >= 80 && progData.estado !== 'completado' && progData.estado !== 'generando_imagenes')) {
-                    console.log("¡Storyboard listo! Transicionando UI...");
+                // Si el servidor indica que el video está completado
+                if (progData.estado === 'completado' || pct >= 100) {
+                    console.log("¡Video finalizado! Cargando en la interfaz...");
                     clearInterval(pollingInterval);
                     pollingInterval = null;
                     
                     progresoFill.style.width = '100%';
                     progresoFill.style.background = '#2ea043';
-                    progresoEstado.innerHTML = `✅ ¡Imágenes listas! Entrando al Editor de Storyboard...`;
+                    progresoEstado.innerHTML = `✅ ¡Video Creado Exitosamente!`;
                     
-                    setTimeout(() => {
-                        // En lugar de ocultar el progreso y esperar, abrimos el storyboard
-                        // y dejamos que el usuario lo revise antes de renderizar.
-                        renderStoryboard(proyectoActual); 
-                        // ensamblarVideoFinal(); // DESACTIVADO: Ahora el usuario revisa primero.
-                    }, 1000);
+                    setTimeout(async () => {
+                        progresoDiv.style.display = 'none';
+                        await cargarVideoPreview(proyectoActual);
+                        await cargarGaleriaProyectos();
+                        renderStoryboard(proyectoActual);
+                    }, 1500);
                 }
 
                 if (progData.estado === 'error') {
