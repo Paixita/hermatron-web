@@ -1657,20 +1657,20 @@ Responde SOLO JSON:
                 y_expr = "trunc(ih/2-(ih/zoom/2))"
             elif motion == "pan_left":
                 zoom_expr = pan_zoom
-                x_expr = f"trunc((1-on/{d_frames_safe})*(iw-(iw/zoom)))"
+                x_expr = f"trunc(max(0, 1-on/{d_frames_safe})*(iw-(iw/zoom)))"
                 y_expr = "trunc(ih/2-(ih/zoom/2))"
             elif motion == "pan_right":
                 zoom_expr = pan_zoom
-                x_expr = f"trunc((on/{d_frames_safe})*(iw-(iw/zoom)))"
+                x_expr = f"trunc(min(1, on/{d_frames_safe})*(iw-(iw/zoom)))"
                 y_expr = "trunc(ih/2-(ih/zoom/2))"
             elif motion == "tilt_up":
                 zoom_expr = pan_zoom
                 x_expr = "trunc(iw/2-(iw/zoom/2))"
-                y_expr = f"trunc((1-on/{d_frames_safe})*(ih-(ih/zoom)))"
+                y_expr = f"trunc(max(0, 1-on/{d_frames_safe})*(ih-(ih/zoom)))"
             else: # tilt_down
                 zoom_expr = pan_zoom
                 x_expr = "trunc(iw/2-(iw/zoom/2))"
-                y_expr = f"trunc((on/{d_frames_safe})*(ih-(ih/zoom)))"
+                y_expr = f"trunc(min(1, on/{d_frames_safe})*(ih-(ih/zoom)))"
                 
             print(f"[CINEMATIC ENGINE] Escena {i+1}: Aplicando movimiento {motion} con filtros analógicos...")
 
