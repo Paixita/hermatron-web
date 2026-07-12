@@ -51,9 +51,7 @@ def pre_producir_video_task(payload: Dict[str, Any]):
         proj_obj = generador_video._cargar_proyecto(proyecto_id)
         if proj_obj:
             proj_obj.voz = voz
-            if not proj_obj.metadata:
-                proj_obj.metadata = {}
-            proj_obj.metadata["bgm_path"] = bgm_path
+            proj_obj.bgm_path = bgm_path
             generador_video._guardar_proyecto(proj_obj)
         
         # 3. Pre-producir (Generar imágenes)

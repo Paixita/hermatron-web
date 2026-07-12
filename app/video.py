@@ -101,6 +101,7 @@ class VideoProyecto:
     narracion: bool = True
     voz: str = "es-MX-JorgeNeural"
     progreso: int = 0
+    bgm_path: Optional[str] = None
 
 
 class GeneradorVideo:
@@ -651,8 +652,8 @@ Responde SOLO JSON:
         else:
             proyecto.audio_path = None
 
-        # Obtener música de fondo si existe en la metadata del proyecto
-        bgm_path = proyecto.metadata.get("bgm_path") if proyecto.metadata else None
+        # Obtener música de fondo si existe en el proyecto
+        bgm_path = proyecto.bgm_path
 
         video_final = await self._ensamblar_video(
             proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion, bgm_path=bgm_path
