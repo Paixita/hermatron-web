@@ -1097,13 +1097,6 @@ Responde SOLO JSON:
         # ── OPTIMIZACIÓN DE PROMPT (Director de Arte IA) ──
         query_opt = await self._optimizar_prompt_imagen(query_limpio, width, height)
         
-        # ── FUENTE 0: Google Gemini 3.1 Flash Image (Nano Banana 2) ──
-        if GOOGLE_API_KEY:
-            exito_gemini = await self._generar_imagen_gemini(query_opt, ruta_salida, width, height)
-            if exito_gemini:
-                return True
-            print("[IMAGENES] Gemini falló, intentando Pollinations...")
-
         query_cod = urllib.parse.quote(query_opt)
         
         # ── FUENTE 1: Pollinations.ai (IA Generativa Principal) ──
