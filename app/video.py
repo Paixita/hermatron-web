@@ -346,7 +346,9 @@ Cada escena debe seguir este orden lógico para las descripciones visuales:
 - CONSISTENCIA DE PERSONAJE: Describe rasgos físicos inalterables para que no cambien entre escenas.
 - IDIOMA: Los campos técnicos (descripcion_visual) deben estar en INGLÉS para máxima compatibilidad con modelos de difusión.
 - PROHIBIDO EL ABSTRACTISMO: Muestra situaciones REALES y LITERALES.
-- DURACIÓN Y LONGITUD (CRÍTICO - REGLA DE 5 SEGUNDOS): Cada escena se convertirá en un clip de 5 segundos (por compatibilidad con Mochi 1). Por lo tanto, el 'texto_narracion' de cada escena debe ser CORTA (entre 12 y 15 palabras de lectura fluida), para que se pueda leer perfectamente en exactamente 5 segundos de duración. Genera entre 8 y 12 escenas en total para mantener el video conciso y fluido.
+- DURACIÓN Y LONGITUD (CRÍTICO - REGLA DE 5 SEGUNDOS): Cada escena se convertirá en un clip de 5 segundos (por compatibilidad con Mochi 1). Por lo tanto, el 'texto_narracion' de cada escena debe ser CORTA (entre 12 y 15 palabras de lectura fluida), para que se pueda leer perfectamente en exactamente 5 segundos de duración.
+- FORMATO DE DIÁLOGOS DE MULTI-VOZ: Si la escena contiene un diálogo, escríbelo estrictamente en el formato: `Nombre: "Mensaje"`. Por ejemplo: `Julián: "Es muy hermoso Hamilton."` o `Hamilton: "Qué te pasa."`. Esto permitirá al sistema asignar voces distintas y realistas a cada personaje.
+- NÚMERO DE ESCENAS DINÁMICO (CRÍTICO): Si el prompt del usuario es corto o describe una sola escena (o una situación de un solo plano), genera EXACTAMENTE esa escena (1 sola escena en el JSON). No inventes escenas de relleno (filler scenes) a menos que el usuario lo solicite de forma explícita pidiendo una secuencia o capítulo de varios pasos.
 
 Responde SOLO con JSON válido, sin markdown:
 {{
@@ -1308,15 +1310,98 @@ Responde SOLO JSON:
     async def _generar_audio(self, proyecto_id: str, guion: str, work_dir: Path,
                               generar_voz_func=None, voz: str = "es-MX-JorgeNeural") -> str:
         audio_path = work_dir / "audio_narracion.mp3"
-
-        # ── FIX CRÍTICO: Usar el texto COMPLETO sin truncar ──
-        # El texto ya viene ensamblado correctamente desde ensamblar_video_final()
-        # con todas las narraciones de todas las escenas concatenadas.
-        # NO truncar a 500 caracteres (eso causaba videos de solo 27 segundos).
         texto_completo = guion.strip()
         if not texto_completo:
             texto_completo = "Video generado con Hermatron."
+
+        # Mapeo de voces por personaje para diálogos multi-voz
+        CHARACTER_VOICES = {
+            "julián": "es-CO-GonzaloNeural",    # Colombia (Joven)
+            "julian": "es-CO-GonzaloNeural",     # Colombia (Joven)
+            "hamilton": "es-MX-JorgeNeural",    # México (Joven/Adulto)
+            "el zarco": "es-US-AlonsoNeural",    # US (Urbano)
+            "zarco": "es-US-AlonsoNeural",
+            "rosalba": "es-MX-LupeNeural",       # México (Femenino natural)
+            "carlos": "es-ES-AlvaroNeural",      # España (Masculino maduro)
+            "vanessa": "es-ES-LuciaNeural",      # España (Femenino joven)
+            "valentina": "es-ES-ConchitaNeural", # España (Femenino dulce)
+            "don nelson": "es-ES-CarlosNeural"   # España (Masculino maduro)
+        }
+
+        import re
+        import os
+        from app.voz import limpiar_texto_para_tts
         
+        # Detectar patrones de diálogo como: Julián: "Es muy hermoso..." o Hamilton: ¿Qué pasa?
+        split_pattern = re.compile(r'(?i)\b(Julián|Julian|Hamilton|El Zarco|Zarco|Rosalba|Carlos|Vanessa|Valentina|Don Nelson)\s*:')
+        parts = split_pattern.split(texto_completo)
+
+        # Si el guión tiene diálogos de múltiples personajes
+        if len(parts) > 1:
+            print(f"[AUDIO] 🎙️ Detectado guion con diálogos multi-personaje. Procesando voces...")
+            blocks = []
+            
+            # El primer elemento es narración introductoria si existe
+            intro = parts[0].strip()
+            if intro:
+                blocks.append((voz, intro))
+                
+            # Procesar las parejas (Personaje, Mensaje)
+            for idx in range(1, len(parts), 2):
+                char_name = parts[idx].lower().strip()
+                char_text = parts[idx+1].strip() if idx+1 < len(parts) else ""
+                
+                # Limpiar comillas iniciales/finales
+                char_text = char_text.strip('"').strip("'").strip()
+                
+                if char_text:
+                    char_voice = CHARACTER_VOICES.get(char_name, voz)
+                    blocks.append((char_voice, char_text))
+
+            # Sintetizar cada bloque por separado
+            temp_files = []
+            import edge_tts
+            import asyncio
+            
+            for b_idx, (block_voice, block_text) in enumerate(blocks):
+                temp_path = work_dir / f"temp_voice_{b_idx}.mp3"
+                block_text_clean = limpiar_texto_para_tts(block_text)
+                if not block_text_clean:
+                    continue
+                
+                try:
+                    edge_voz = block_voice if "-" in block_voice else "es-MX-JorgeNeural"
+                    print(f"[AUDIO] Bloque {b_idx+1}: [{edge_voz}] '{block_text_clean[:30]}...'")
+                    communicate = edge_tts.Communicate(block_text_clean, edge_voz, rate="-5%", volume="+5%")
+                    await asyncio.wait_for(communicate.save(str(temp_path)), timeout=30.0)
+                    if temp_path.exists() and temp_path.stat().st_size > 0:
+                        temp_files.append(str(temp_path))
+                except Exception as e:
+                    print(f"[AUDIO] Error sintetizando bloque {b_idx+1} con voz {block_voice}: {e}")
+
+            if temp_files:
+                # Concatenar todos los MP3 temporales en uno solo final re-codificando
+                concat_str = "|".join(temp_files)
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", f"concat:{concat_str}",
+                    "-acodec", "libmp3lame", "-ar", "44100", "-ac", "2",
+                    str(audio_path)
+                ]
+                ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd)
+                
+                # Limpiar archivos temporales
+                for tf in temp_files:
+                    try: os.unlink(tf)
+                    except: pass
+                
+                if ok and audio_path.exists():
+                    print(f"[AUDIO] ✅ Mezcla de voces multi-personaje lista: {audio_path}")
+                    return str(audio_path)
+                else:
+                    print(f"[AUDIO] Falló concatenación de voces. Usando fallback de narración única.")
+
+        # Fallback a narración de voz única si no hay diálogos estructurados
         print(f"[AUDIO] Texto completo para narración: {len(texto_completo)} caracteres ({len(texto_completo.split())} palabras)")
 
         # Intento 1: ElevenLabs
@@ -1355,7 +1440,6 @@ Responde SOLO JSON:
             import asyncio
             print(f"[AUDIO] Generando con gTTS (respaldo)...")
             tts = gtts.gTTS(text=texto_completo, lang='es', tld='com.mx')
-            # Ejecutar llamada sincrónica en un hilo separado para no bloquear el Event Loop de FastAPI
             await asyncio.to_thread(tts.save, str(audio_path))
             print(f"[AUDIO]  gTTS OK")
             return str(audio_path)
