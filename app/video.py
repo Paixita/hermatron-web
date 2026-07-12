@@ -348,10 +348,10 @@ Cada escena debe seguir este orden lógico para las descripciones visuales:
 - DURACIÓN Y LONGITUD (CRÍTICO - REGLA DE 5 SEGUNDOS): Cada escena se convertirá en un clip de 5 segundos (por compatibilidad con Mochi 1). Por lo tanto, el 'texto_narracion' de cada escena debe ser CORTA (entre 12 y 15 palabras de lectura fluida), para que se pueda leer perfectamente en exactamente 5 segundos de duración. Genera entre 8 y 12 escenas en total para mantener el video conciso y fluido.
 
 Responde SOLO con JSON válido, sin markdown:
-{
+{{
     "guion_completo": "texto completo del guión narrativo abreviado (150-200 palabras)",
     "escenas": [
-        {
+        {{
             "numero": 1,
             "titulo": "Apertura impactante",
             "texto_narracion": "Escribe aquí de 12 a 15 palabras de narración (lectura de 5 segundos)...",
@@ -362,9 +362,9 @@ Responde SOLO con JSON válido, sin markdown:
             "movimiento": "...",
             "emocion": "...",
             "query_pexels": "..."
-        }
+        }}
     ]
-}
+}}
 """
         user_prompt = f"""
 TEMA: {proyecto.tema}
