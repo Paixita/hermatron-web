@@ -226,6 +226,114 @@ class GeneradorVideo:
 
         return proyecto_id
 
+    async def _call_llm(self, system_prompt: str, user_prompt: str, json_mode: bool = True) -> str:
+        """
+        Llama al LLM usando una cadena de fallbacks (Groq -> OpenRouter -> Gemini Text).
+        Garantiza que siempre responda un JSON válido si json_mode=True.
+        """
+        from app.config import GROQ_API_KEY, OPENROUTER_API_KEY, GOOGLE_API_KEY, OPENROUTER_MODEL
+        import json
+        
+        # 1. Intentar con Groq
+        if GROQ_API_KEY:
+            try:
+                from groq import Groq
+                client_groq = Groq(api_key=GROQ_API_KEY)
+                print("[LLM] Intentando con Groq (llama-3.3-70b-versatile)...")
+                
+                kwargs = {
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "model": "llama-3.3-70b-versatile",
+                    "temperature": 0.7,
+                    "max_tokens": 2500,
+                }
+                if json_mode:
+                    kwargs["response_format"] = {"type": "json_object"}
+                    
+                response = client_groq.chat.completions.create(**kwargs)
+                res_text = response.choices[0].message.content.strip()
+                if res_text:
+                    print("[LLM] ✅ Éxito con Groq")
+                    return res_text
+            except Exception as e:
+                print(f"[LLM] ⚠️ Groq falló: {e}. Probando respaldo...")
+
+        # 2. Intentar con OpenRouter (si está configurado)
+        if OPENROUTER_API_KEY:
+            try:
+                from openai import AsyncOpenAI
+                client_or = AsyncOpenAI(
+                    api_key=OPENROUTER_API_KEY,
+                    base_url="https://openrouter.ai/api/v1"
+                )
+                model_or = OPENROUTER_MODEL or "google/gemini-2.5-flash"
+                print(f"[LLM] Intentando con OpenRouter ({model_or})...")
+                
+                kwargs = {
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "model": model_or,
+                    "temperature": 0.7,
+                    "max_tokens": 2500,
+                }
+                if json_mode:
+                    kwargs["response_format"] = {"type": "json_object"}
+                    
+                response = await client_or.chat.completions.create(**kwargs)
+                res_text = response.choices[0].message.content.strip()
+                if res_text:
+                    print("[LLM] ✅ Éxito con OpenRouter")
+                    return res_text
+            except Exception as e:
+                print(f"[LLM] ⚠️ OpenRouter falló: {e}. Probando respaldo...")
+
+        # 3. Intentar con Gemini Text (nativo)
+        if GOOGLE_API_KEY:
+            try:
+                print("[LLM] Intentando con Gemini Text nativo (gemini-2.5-flash)...")
+                import google.genai as genai
+                from google.genai import types
+                
+                client_gemini = genai.Client(api_key=GOOGLE_API_KEY)
+                contents = f"System prompt:\n{system_prompt}\n\nUser prompt:\n{user_prompt}"
+                
+                config_kwargs = {
+                    "temperature": 0.7,
+                    "max_output_tokens": 2500,
+                }
+                if json_mode:
+                    config_kwargs["response_mime_type"] = "application/json"
+                    
+                response = await client_gemini.aio.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=contents,
+                    config=types.GenerateContentConfig(**config_kwargs)
+                )
+                res_text = response.text.strip()
+                if res_text:
+                    print("[LLM] ✅ Éxito con Gemini Text")
+                    return res_text
+            except Exception as e:
+                print(f"[LLM] ⚠️ Gemini Text falló: {e}")
+
+        # Fallback local
+        print("[LLM] ❌ Todos los proveedores fallaron. Usando mock/fallback por defecto.")
+        if json_mode:
+            return json.dumps({
+                "tono_general": "documental informativo",
+                "estilo_visual": "cinematográfico profesional",
+                "atmosfera": "misteriosa y reveladora",
+                "publico_objetivo": "público general interesado en el tema",
+                "duracion_estimada": "2-3 minutos",
+                "referencia_cinematografica": "documental de Discovery Channel"
+            })
+        return "Todos los proveedores fallaron."
+
     async def _analizar_con_ia(self, proyecto_id: str, tema: str, prompt: str, groq_client=None) -> dict:
         """La IA analiza el tema como Director de Cine"""
         system_prompt = """
@@ -256,24 +364,14 @@ DESCRIPCIÓN: {prompt}
 
 Analiza este tema como director de cine profesional.
 """
-
-        if groq_client:
-            response = groq_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                model="llama-3.3-70b-versatile",
-                temperature=0.7,
-                max_tokens=500,
-                response_format={"type": "json_object"}
-            )
-            texto = response.choices[0].message.content.strip()
+        try:
+            texto = await self._call_llm(system_prompt, user_prompt, json_mode=True)
             # Limpiar markdown si existe
             texto = re.sub(r'^```json\s*', '', texto)
             texto = re.sub(r'\s*```$', '', texto)
             analisis = json.loads(texto)
-        else:
+        except Exception as e:
+            print(f"[VIDEO] Error analizando con LLM, usando fallback fijo: {e}")
             analisis = {
                 "tono_general": "documental informativo",
                 "estilo_visual": "cinematográfico profesional",
@@ -376,18 +474,8 @@ DESCRIPIÓN: {proyecto.prompt}
 Diseña el video completo como director de cine.
 """
 
-        if groq_client:
-            response = groq_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                model="llama-3.3-70b-versatile",
-                temperature=0.7,
-                max_tokens=2500,
-                response_format={"type": "json_object"}
-            )
-            texto = response.choices[0].message.content.strip()
+        try:
+            texto = await self._call_llm(system_prompt, user_prompt, json_mode=True)
             # Limpiar TODO tipo de markdown y texto extra
             texto = re.sub(r'^```json\s*', '', texto)
             texto = re.sub(r'\s*```$', '', texto)
@@ -399,7 +487,8 @@ Diseña el video completo como director de cine.
                 if idx != -1:
                     texto = texto[idx:]
             data = json.loads(texto)
-        else:
+        except Exception as e:
+            print(f"[VIDEO] Error diseñando escenas con LLM: {e}. Usando placeholder.")
             data = self._generar_escenas_placeholder(proyecto.tema)
 
         # Guardar guión y escenas
@@ -1094,6 +1183,24 @@ Responde SOLO JSON:
         # Limpieza inicial del prompt
         query_limpio = query[:1000].replace("\n", " ").replace('"', "").strip()
 
+        # Inyectar consistencia física de personajes registrados si son mencionados en el prompt
+        try:
+            personajes = await memoria.obtener_todos_personajes()
+            query_lower = query_limpio.lower()
+            import unicodedata
+            def normalize(text):
+                return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn').lower()
+            
+            for p in personajes:
+                nombre_p = p.get("nombre", "").lower()
+                if nombre_p and normalize(nombre_p) in normalize(query_lower):
+                    desc_fisica_en = p.get("prompt_referencia", "")
+                    if desc_fisica_en and normalize(desc_fisica_en)[:30] not in normalize(query_lower):
+                        query_limpio = f"{desc_fisica_en}, {query_limpio}"
+                        print(f"[POLLINATIONS] 👥 Consistencia: Inyectando prompt físico de {p['nombre']}")
+        except Exception as e:
+            print(f"[POLLINATIONS] Error inyectando consistencia de personaje: {e}")
+
         # ── OPTIMIZACIÓN DE PROMPT (Director de Arte IA) ──
         query_opt = await self._optimizar_prompt_imagen(query_limpio, width, height)
         
@@ -1506,13 +1613,22 @@ Responde SOLO JSON:
         is_video = recurso_path_obj.suffix.lower() in ('.mp4', '.avi', '.mov', '.mkv', '.webm')
         
         if is_video:
-            # Video: hacemos un loop infinito del recurso, lo recortamos a la duración exacta y ajustamos escala/crop
+            # Video: hacemos un loop infinito del recurso, lo recortamos a la duración exacta y aplicamos filtros cinemáticos
+            vf_video = (
+                f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},"
+                f"format=yuv420p,fps={fps},"
+                f"noise=alls=4:allf=t," # Mismo grano analógico activo
+                f"eq=contrast=1.05:saturation=1.05," # Contraste sutil
+                f"colorbalance=rs=0.03:bs=-0.03," # Tono cálido
+                f"vignette=angle=PI/5," # Viñeta cinematográfica
+                f"fade=t=in:st=0:d=0.3,fade=t=out:st={duracion - 0.3:.3f}:d=0.3" # Transición suave
+            )
             cmd = [
                 "ffmpeg", "-y",
                 "-stream_loop", "-1",
                 "-i", recurso_path,
                 "-t", f"{duracion:.4f}",
-                "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},format=yuv420p,fps={fps}",
+                "-vf", vf_video,
                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
                 "-an",
                 out_path
@@ -1520,29 +1636,69 @@ Responde SOLO JSON:
             ok, err = self._run_ffmpeg(cmd)
             return ok and Path(out_path).exists()
         else:
-            # Imagen: zoompan estabilizado Ken Burns
+            # Imagen: zoompan dinámico + overlays analógicos de cine local
+            import random
             d_frames = int(duracion * fps)
             d_frames_safe = d_frames + 10
-            if i % 2 == 0:
-                zoom_expr = "zoom+0.0006"
-            else:
-                zoom_expr = "if(eq(on,1),1.1,max(1.0006,zoom-0.0006))"
+            
+            # Elegir movimiento aleatorio pero reproducible por escena
+            motion_types = ["zoom_in", "zoom_out", "pan_left", "pan_right", "tilt_up", "tilt_down"]
+            r = random.Random(i + 100)
+            motion = r.choice(motion_types)
+            
+            pan_zoom = "1.25"
+            if motion == "zoom_in":
+                zoom_expr = "zoom+0.0008"
+                x_expr = "trunc(iw/2-(iw/zoom/2))"
+                y_expr = "trunc(ih/2-(ih/zoom/2))"
+            elif motion == "zoom_out":
+                zoom_expr = "if(eq(on,1),1.15,max(1.0,zoom-0.0008))"
+                x_expr = "trunc(iw/2-(iw/zoom/2))"
+                y_expr = "trunc(ih/2-(ih/zoom/2))"
+            elif motion == "pan_left":
+                zoom_expr = pan_zoom
+                x_expr = f"trunc((1-on/{d_frames_safe})*(iw-(iw/zoom)))"
+                y_expr = "trunc(ih/2-(ih/zoom/2))"
+            elif motion == "pan_right":
+                zoom_expr = pan_zoom
+                x_expr = f"trunc((on/{d_frames_safe})*(iw-(iw/zoom)))"
+                y_expr = "trunc(ih/2-(ih/zoom/2))"
+            elif motion == "tilt_up":
+                zoom_expr = pan_zoom
+                x_expr = "trunc(iw/2-(iw/zoom/2))"
+                y_expr = f"trunc((1-on/{d_frames_safe})*(ih-(ih/zoom)))"
+            else: # tilt_down
+                zoom_expr = pan_zoom
+                x_expr = "trunc(iw/2-(iw/zoom/2))"
+                y_expr = f"trunc((on/{d_frames_safe})*(ih-(ih/zoom)))"
                 
+            print(f"[CINEMATIC ENGINE] Escena {i+1}: Aplicando movimiento {motion} con filtros analógicos...")
+
             if h > w: # Vertical
                 vf_zoom = (
                     f"scale=1080:1920:force_original_aspect_ratio=increase,"
                     f"crop=1080:1920,"
                     f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
-                    f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1080x1920:fps={fps},"
-                    f"scale={w}:{h}"
+                    f"x='{x_expr}':y='{y_expr}':s=1080x1920:fps={fps},"
+                    f"scale={w}:{h},"
+                    f"noise=alls=4:allf=t," # Grano analógico activo
+                    f"eq=contrast=1.05:saturation=1.05," # Ajuste sutil
+                    f"colorbalance=rs=0.03:bs=-0.03," # Tono cálido
+                    f"vignette=angle=PI/5," # Viñeta cinematográfica
+                    f"fade=t=in:st=0:d=0.3,fade=t=out:st={duracion - 0.3:.3f}:d=0.3" # Fundido suave
                 )
             else: # Horizontal
                 vf_zoom = (
                     f"scale=1920:1080:force_original_aspect_ratio=increase,"
                     f"crop=1920:1080,"
                     f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
-                    f"x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':s=1920x1080:fps={fps},"
-                    f"scale={w}:{h}"
+                    f"x='{x_expr}':y='{y_expr}':s=1920x1080:fps={fps},"
+                    f"scale={w}:{h},"
+                    f"noise=alls=4:allf=t,"
+                    f"eq=contrast=1.05:saturation=1.05,"
+                    f"colorbalance=rs=0.03:bs=-0.03,"
+                    f"vignette=angle=PI/5,"
+                    f"fade=t=in:st=0:d=0.3,fade=t=out:st={duracion - 0.3:.3f}:d=0.3" # Fundido suave
                 )
             cmd_clip = [
                 "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.4f}",
