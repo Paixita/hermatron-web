@@ -336,8 +336,8 @@ Cada escena debe seguir este orden lógico para las descripciones visuales:
 
 🚫 REGLAS DE ORO (Evitar Descoordinación):
 - FICHA DE PERSONAJES OBLIGATORIA (CONSISTENCIA DE RAZA Y ASPECTO):
-  * Julián (Protagonista): Siempre debe ser de raza negra (Afrocolombiano/black), cabello negro corto y muy rizado. De niño (8 años): mirada inocente, ropa sencilla de barrio. De adulto: joven atlético de raza negra.
-  * Hamilton: Joven elegante de raza negra (Afrocolombiano/black), cabello negro corto y rizado, con ojos claros distintivos (verdes o avellana).
+  * Julián (Protagonista): Siempre debe ser de raza negra (Afrocolombiano/black), cabello negro corto y muy rizado. De niño (8 años): mirada inocente, ropa sencilla de barrio. De adulto (15 años): joven de raza negra.
+  * Hamilton: Joven mestizo/trigueño (mayor que Julián), elegante, con cabello castaño o negro corto, ojos claros muy distintivos (verdes o avellana).
   * El Zarco: Joven colombiano trigueño o mulato, ojos claros muy intensos (azules o verdes), aspecto urbano y mirada desafiante.
   * Carlos (papá), Rosalba (mamá), Vanessa y Valentina (hermanas): Todos son de raza negra (Afrocolombianos/black).
 - CERO AMBIGÜEDAD: Define sujetos específicos en cada escena (ej: "8-year-old Afro-Colombian black boy Julian, short curly hair...").

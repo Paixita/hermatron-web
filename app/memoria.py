@@ -117,8 +117,8 @@ class MemoriaDB:
                         ),
                         (
                             "Hamilton",
-                            "Joven afrocolombiano de raza negra, de 15 años, muy elegante con camisa blanca impecable, ojos claros expresivos, postura erguida.",
-                            "15-year-old Afro-Colombian black boy, clean neat haircut, expressive light eyes, neat white shirt, very elegant posture, 3d style",
+                            "Joven mestizo y trigueño (mayor que Julián), muy elegante con camisa blanca impecable, ojos claros expresivos de color verde.",
+                            "Elegant light-skinned young Colombian boy, neat short dark hair, expressive light green eyes, neat white shirt, 3d style",
                             "/static/personajes/Hamilton.png"
                         ),
                         (
