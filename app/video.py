@@ -25,6 +25,7 @@ from app.config import (
 )
 from google import genai
 from google.genai import types
+from app.memoria import memoria
 
 
 # --- DIRECTORIO DE VIDEOS ---
