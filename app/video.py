@@ -786,6 +786,14 @@ Responde SOLO JSON:
         style_prefix = f"{estilo_visual}, {atmosfera} atmosphere, consistent art style"
         print(f"[VIDEO] Seed compartido del proyecto: {project_seed}, Estilo: {style_prefix}")
 
+        # Obtener personajes registrados para consistencia multimodal
+        try:
+            personajes = await memoria.obtener_todos_personajes()
+            print(f"[VIDEO] Cargados {len(personajes)} personajes de la DB para consistencia visual.")
+        except Exception as e:
+            print(f"[VIDEO] Error cargando personajes para consistencia: {e}")
+            personajes = []
+
         for i, escena in enumerate(escenas):
             num_escena = escena.get("numero", i+1)
             print(f"[VIDEO] Procesando visuales para escena {num_escena} de {total}...")
@@ -805,10 +813,27 @@ Responde SOLO JSON:
             
             exito_imagen = False
             
+            # Buscar personajes en la descripción o texto de la escena para consistencia
+            ref_imgs = []
+            desc_lower = descripcion.lower()
+            texto_lower = escena.get("texto_narracion", "").lower()
+            for p in personajes:
+                nombre_p = p.get("nombre", "").lower()
+                import unicodedata
+                def normalize(text):
+                    return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn').lower()
+                
+                if nombre_p and (normalize(nombre_p) in normalize(desc_lower) or normalize(nombre_p) in normalize(texto_lower)):
+                    img_ref = p.get("imagen_path")
+                    if img_ref:
+                        local_img_ref = img_ref.lstrip('/')
+                        if os.path.exists(local_img_ref):
+                            ref_imgs.append(local_img_ref)
+
             # Intentar generar imagen base con Gemini
             if GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
                 print(f"[VIDEO] Generando imagen base con Gemini (Nano Banana) para escena {num_escena}...")
-                exito_imagen = await self._generar_imagen_gemini(query_mejorado, str(img_path), width, height)
+                exito_imagen = await self._generar_imagen_gemini(query_mejorado, str(img_path), width, height, reference_images=ref_imgs)
             
             # Fallback a Pollinations para imagen base
             if not exito_imagen:
@@ -950,7 +975,7 @@ Responde SOLO JSON:
             print(f"[MOCHI] Error llamando a Mochi 1 API: {e}")
             return False
 
-    async def _generar_imagen_gemini(self, prompt: str, ruta_salida: str, width: int = 1024, height: int = 1024) -> bool:
+    async def _generar_imagen_gemini(self, prompt: str, ruta_salida: str, width: int = 1024, height: int = 1024, reference_images: list = None) -> bool:
         """
         Generación de imagen premium usando Nano Banana 2 (Gemini 3.1 Flash Image).
         """
@@ -967,13 +992,27 @@ Responde SOLO JSON:
             ar_hint = "portrait aspect ratio, 9:16, vertical" if height > width else "landscape aspect ratio, 16:9, horizontal"
             if width == height: ar_hint = "square aspect ratio, 1:1"
             
-            prompt_with_ar = f"{prompt}. Note: Generate in {ar_hint}."
+            from PIL import Image
+            contents = []
+            
+            if reference_images:
+                for img_path in reference_images:
+                    if os.path.exists(img_path):
+                        try:
+                            pil_img = Image.open(img_path)
+                            contents.append(pil_img)
+                            print(f"[GEMINI] Usando imagen de referencia para consistencia: {img_path}")
+                        except Exception as e:
+                            print(f"[GEMINI] Error cargando imagen de referencia {img_path}: {e}")
+            
+            prompt_with_ar = f"{prompt}. Note: Generate a new image incorporating the style, face, and visual identity of the reference characters shown in the input images. Maintain face consistency for characters. Generate in {ar_hint}."
+            contents.append(prompt_with_ar)
             
             # Modelo específico de 2026 para generación de imágenes
             # Pedimos específicamente modalidad IMAGE
             response = await client.aio.models.generate_content(
                 model="gemini-3.1-flash-image-preview",
-                contents=prompt_with_ar,
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=["IMAGE"]
                 )

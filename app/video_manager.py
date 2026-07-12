@@ -89,14 +89,45 @@ async def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt:
         
         width, height = generador_video._get_resolucion_from_tema(proj_obj.tema)
         
+        # Obtener personajes para consistencia multimodal
+        try:
+            from app.memoria import memoria
+            personajes = await memoria.obtener_todos_personajes()
+        except Exception as e:
+            print(f"[REGENERAR] Error cargando personajes: {e}")
+            personajes = []
+
         for i in range(cantidad):
             alt_path = escena_dir / f"imagen_alt_{i+1}.png"
-            # Usar la nueva lógica de optimización (Director de Arte IA)
-            exito = await generador_video._generar_imagen_pollinations(prompt_final, str(alt_path), width, height)
+            
+            # Buscar personajes en el prompt para consistencia
+            ref_imgs = []
+            desc_lower = prompt_final.lower()
+            for p in personajes:
+                nombre_p = p.get("nombre", "").lower()
+                import unicodedata
+                def normalize(text):
+                    return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn').lower()
+                if nombre_p and (normalize(nombre_p) in normalize(desc_lower)):
+                    img_ref = p.get("imagen_path")
+                    if img_ref:
+                        local_img_ref = img_ref.lstrip('/')
+                        if os.path.exists(local_img_ref):
+                            ref_imgs.append(local_img_ref)
+            
+            exito = False
+            from app.config import GOOGLE_API_KEY, GEMINI_SAFETY_MODE
+            if GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
+                print(f"[REGENERAR] Intentando con Gemini y consistencia para alt {i+1}...")
+                exito = await generador_video._generar_imagen_gemini(prompt_final, str(alt_path), width, height, reference_images=ref_imgs)
+                
+            if not exito:
+                print(f"[REGENERAR] Usando Pollinations para alt {i+1}...")
+                exito = await generador_video._generar_imagen_pollinations(prompt_final, str(alt_path), width, height)
             
             if not exito:
                 # Fallback a Picsum si falla todo
-                print(f"[REGENERAR] Pollinations falló en alt {i+1}, usando placeholder")
+                print(f"[REGENERAR] Todo falló en alt {i+1}, usando placeholder")
                 await generador_video._generar_imagen_placeholder(str(alt_path), prompt_final)
                 
             opciones.append(str(alt_path))
