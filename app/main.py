@@ -23,7 +23,7 @@ try:
 except Exception:
     pass
 
-from fastapi import FastAPI, Request, HTTPException, Form, Depends, Response
+from fastapi import FastAPI, Request, HTTPException, Form, Depends, Response, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -59,6 +59,7 @@ class VideoRequest(BaseModel):
     voz: Optional[str] = "es-MX-JorgeNeural"
     estilo: Optional[str] = "cinematic"
     formato: Optional[str] = "16:9"
+    bgm_path: Optional[str] = None
 
 class ProbarVozRequest(BaseModel):
     voz: str
@@ -961,6 +962,49 @@ async def obtener_modos():
     """Lista de modos disponibles"""
     return {"modos": listar_modos()}
 
+@app.get("/api/personajes")
+async def api_obtener_todos_personajes():
+    personajes = await memoria.obtener_todos_personajes()
+    return {"personajes": personajes}
+
+@app.post("/api/personajes")
+async def api_guardar_personaje(
+    nombre: str = Form(...),
+    descripcion_fisica: str = Form(...),
+    prompt_referencia: str = Form(...),
+    imagen: Optional[UploadFile] = File(None)
+):
+    imagen_path = None
+    if imagen and imagen.filename:
+        ext = Path(imagen.filename).suffix
+        safe_name = "".join(c for c in nombre if c.isalnum() or c in ("-", "_")).rstrip()
+        filename = f"{safe_name}{ext}"
+        save_path = Path("static/personajes") / filename
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(save_path, "wb") as buffer:
+            shutil.copyfileobj(imagen.file, buffer)
+        imagen_path = f"/static/personajes/{filename}"
+    else:
+        existente = await memoria.obtener_personaje(nombre)
+        if existente:
+            imagen_path = existente.get("imagen_path")
+            
+    await memoria.guardar_personaje(nombre, descripcion_fisica, prompt_referencia, imagen_path)
+    return {"status": "success", "message": f"Personaje {nombre} guardado correctamente"}
+
+@app.delete("/api/personajes/{nombre}")
+async def api_eliminar_personaje(nombre: str):
+    existente = await memoria.obtener_personaje(nombre)
+    if existente and existente.get("imagen_path"):
+        img_path = Path(existente.get("imagen_path").lstrip("/"))
+        if img_path.exists():
+            try:
+                img_path.unlink()
+            except:
+                pass
+    await memoria.eliminar_personaje(nombre)
+    return {"status": "success", "message": f"Personaje {nombre} eliminado correctamente"}
+
 @app.get("/api/video/proyectos")
 async def listar_videos(): 
     if not VIDEOS_DIR.exists(): return {"creaciones": [], "importados": [], "otros": []}
@@ -1126,7 +1170,8 @@ async def pre_produccion_endpoint(req: VideoRequest, background_tasks: Backgroun
         "proyecto_id": proyecto_id,
         "tema": tema_con_formato,
         "prompt": req.prompt + f" Estilo: {req.estilo}",
-        "voz": req.voz
+        "voz": req.voz,
+        "bgm_path": req.bgm_path
     }
     
     # Lanzar tarea en background (GRATIS)
@@ -1182,6 +1227,24 @@ async def seleccionar_imagen_endpoint(req: SeleccionarImagenRequest, background_
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/video/subir-musica")
+async def api_subir_musica(archivo: UploadFile = File(...)):
+    ext = Path(archivo.filename).suffix
+    if ext.lower() not in (".mp3", ".wav", ".m4a", ".ogg"):
+        raise HTTPException(status_code=400, detail="Formato de audio no soportado")
+    
+    save_dir = Path("static/bgm")
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Nombre de archivo único y seguro
+    filename = f"musica_usuario_{int(time.time())}{ext}"
+    save_path = save_dir / filename
+    
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(archivo.file, buffer)
+        
+    return {"status": "success", "bgm_path": f"/static/bgm/{filename}", "nombre": archivo.filename}
 
 @app.get("/api/video/celery-status/{task_id}")
 async def celery_status(task_id: str):

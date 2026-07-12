@@ -291,6 +291,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
         cargarGaleriaProyectos();
     } catch (e) { console.error("Error cargando galería:", e); }
+
+    try {
+        cargarPersonajes();
+    } catch (e) { console.error("Error cargando personajes al iniciar:", e); }
 });
 
 function actualizarRatioPreview() {
@@ -339,6 +343,8 @@ async function crearVideoDesdeStudio() {
         console.log("Iniciando Pre-Producción (CapCut Flow)...");
         const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
         
+        const bgmPath = document.getElementById('bgmPathSelected')?.value || null;
+
         // Fase 1: Enviar solicitud de pre-producción (solo genera guion e imágenes)
         const response = await fetch('/api/video/pre-produccion', {
             method: 'POST',
@@ -348,7 +354,8 @@ async function crearVideoDesdeStudio() {
                 prompt: prompt,
                 voz: voz,
                 estilo: estilo,
-                formato: ratio
+                formato: ratio,
+                bgm_path: bgmPath
             })
         });
 
@@ -865,6 +872,15 @@ async function renderStoryboard(proyectoId) {
             if (relPath) relPath = relPath.replace(/\\/g, '/');
             const imgUrl = relPath ? '/video_files' + relPath : '';
             
+            // Generar opciones del select de personajes de referencia
+            let charOptions = `<option value="ia" selected>🔮 Generar con IA (Default)</option>`;
+            if (window.personajes && window.personajes.length > 0) {
+                window.personajes.forEach(p => {
+                    const isSelected = escena.imagen_path && (escena.imagen_path.includes(p.nombre) || escena.imagen_path === p.imagen_path);
+                    charOptions += `<option value="${p.imagen_path}" ${isSelected ? 'selected' : ''}>👤 Usar Foto de ${p.nombre}</option>`;
+                });
+            }
+
             const card = document.createElement('div');
             card.className = 'storyboard-card-new';
             card.innerHTML = `
@@ -890,6 +906,12 @@ async function renderStoryboard(proyectoId) {
                     <div class="sc-prompt-box">
                         <label>AI Art Prompt</label>
                         <textarea id="prompt-escena-${escena.numero}">${escena.descripcion_visual || ''}</textarea>
+                    </div>
+                    <div class="sc-character-select" style="margin-top: 10px;">
+                        <label style="font-size: 0.75rem; color: var(--texto-secundario); font-weight: 600; display: block; margin-bottom: 4px;">🖼️ Visual de Referencia:</label>
+                        <select class="select-sm" style="width: 100%; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 4px; border-radius: 4px; font-size: 0.8rem;" onchange="seleccionarPersonajeReferencia('${proyectoId}', ${escena.numero}, this.value)">
+                            ${charOptions}
+                        </select>
                     </div>
                 </div>
                 <div id="alternativas-${escena.numero}" class="sc-alternativas"></div>
@@ -1066,5 +1088,209 @@ async function ensamblarVideoFinal() {
     } catch (e) {
         console.error(e);
         showToast('❌ Error al iniciar ensamble', 'error');
+    }
+}
+
+// ==========================================
+// CONTROL DE MÚSICA DE FONDO (BGM)
+// ==========================================
+
+async function subirMusicaDeFondo(file) {
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('archivo', file);
+    
+    showToast('📤 Subiendo música de fondo...', 'info');
+    
+    try {
+        const response = await fetch('/api/video/subir-musica', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (data.status === 'success') {
+            document.getElementById('bgmPathSelected').value = data.bgm_path;
+            document.getElementById('bgmFileName').textContent = data.nombre;
+            document.getElementById('btnRemoveBgm').style.display = 'inline-block';
+            showToast('🎵 Música subida y seleccionada', 'success');
+        } else {
+            showToast('❌ Error al subir música', 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error de conexión al subir música', 'error');
+    }
+}
+
+function removerMusicaDeFondo() {
+    document.getElementById('bgmPathSelected').value = '';
+    document.getElementById('bgmFileName').textContent = 'Sin música';
+    document.getElementById('btnRemoveBgm').style.display = 'none';
+    document.getElementById('bgmFileInput').value = '';
+    showToast('🎵 Música de fondo removida', 'info');
+}
+
+// ==========================================
+// GESTIÓN DE ELENCO DE PERSONAJES
+// ==========================================
+
+window.personajes = [];
+
+async function cargarPersonajes() {
+    try {
+        const response = await fetch('/api/personajes');
+        const data = await response.json();
+        window.personajes = data.personajes || [];
+        renderCharacterList();
+    } catch (error) {
+        console.error("Error cargando personajes:", error);
+    }
+}
+
+function renderCharacterList() {
+    const listDiv = document.getElementById('characterList');
+    if (!listDiv) return;
+    
+    if (window.personajes.length === 0) {
+        listDiv.innerHTML = `
+            <div style="font-size: 0.8rem; color: var(--texto-secundario); text-align: center; padding: 10px; background: var(--fondo-terciario); border-radius: 6px; border: 1px dashed var(--borde);">
+                Sin personajes registrados
+            </div>
+        `;
+        return;
+    }
+    
+    listDiv.innerHTML = '';
+    window.personajes.forEach(p => {
+        const card = document.createElement('div');
+        card.style.display = 'flex';
+        card.style.alignItems = 'center';
+        card.style.justifyContent = 'space-between';
+        card.style.background = 'var(--fondo-terciario)';
+        card.style.padding = '8px';
+        card.style.borderRadius = '6px';
+        card.style.border = '1px solid var(--borde)';
+        card.style.gap = '8px';
+        
+        const photoUrl = p.imagen_path || 'https://via.placeholder.com/40?text=👤';
+        
+        card.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
+                <img src="${photoUrl}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1px solid var(--borde);" onerror="this.src='https://via.placeholder.com/36?text=👤'">
+                <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; font-weight: 500;">
+                    <span style="display: block; color: var(--texto);">${p.nombre}</span>
+                    <span style="font-size: 0.7rem; color: var(--texto-secundario); display: block; overflow: hidden; text-overflow: ellipsis;">${p.descripcion_fisica}</span>
+                </div>
+            </div>
+            <button type="button" class="btn btn-sm btn-danger" style="padding: 2px 6px; font-size: 0.75rem;" onclick="eliminarPersonaje('${p.nombre}')" title="Eliminar personaje">✕</button>
+        `;
+        listDiv.appendChild(card);
+    });
+}
+
+function abrirModalNuevoPersonaje() {
+    document.getElementById('modalPersonaje').style.display = 'flex';
+}
+
+function cerrarModalPersonaje() {
+    document.getElementById('modalPersonaje').style.display = 'none';
+    document.getElementById('formPersonaje').reset();
+}
+
+async function guardarPersonaje(event) {
+    event.preventDefault();
+    
+    const nombre = document.getElementById('charName').value.trim();
+    const descripcion = document.getElementById('charDesc').value.trim();
+    const prompt = document.getElementById('charPrompt').value.trim();
+    const imagenFile = document.getElementById('charImage').files[0];
+    
+    if (!nombre || !descripcion || !prompt) {
+        showToast('Por favor completa todos los campos requeridos', 'warning');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('nombre', nombre);
+    formData.append('descripcion_fisica', descripcion);
+    formData.append('prompt_referencia', prompt);
+    if (imagenFile) {
+        formData.append('imagen', imagenFile);
+    }
+    
+    showToast('💾 Guardando personaje...', 'info');
+    
+    try {
+        const response = await fetch('/api/personajes', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (response.ok) {
+            showToast(`✅ Personaje ${nombre} guardado`, 'success');
+            cerrarModalPersonaje();
+            await cargarPersonajes();
+        } else {
+            showToast('❌ Error guardando personaje', 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error de red al guardar personaje', 'error');
+    }
+}
+
+async function eliminarPersonaje(nombre) {
+    if (!confirm(`¿Seguro que deseas eliminar a ${nombre}?`)) return;
+    
+    showToast('🗑️ Eliminando personaje...', 'info');
+    
+    try {
+        const response = await fetch(`/api/personajes/${nombre}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            showToast(`✅ Personaje ${nombre} eliminado`, 'success');
+            await cargarPersonajes();
+        } else {
+            showToast('❌ Error al eliminar', 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error de red', 'error');
+    }
+}
+
+async function seleccionarPersonajeReferencia(proyectoId, escenaNum, value) {
+    if (value === 'ia') {
+        // Si elige IA, volvemos a regenerar la imagen (usando la IA)
+        regenerarImagenOpciones(proyectoId, escenaNum);
+        return;
+    }
+    
+    // Mostrar overlay de cargando
+    const overlay = document.getElementById(`overlay-escena-${escenaNum}`);
+    if (overlay) overlay.classList.add('active');
+    
+    try {
+        const response = await fetch('/api/video/seleccionar-imagen', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                proyecto_id: proyectoId,
+                escena_num: escenaNum,
+                imagen_path: value
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            showToast('✅ Imagen de referencia aplicada', 'success');
+            // Recargar imagen en el preview del DOM
+            let relPath = value.replace(/\\/g, '/');
+            document.getElementById('img-escena-' + escenaNum).src = relPath + '?t=' + new Date().getTime();
+        } else {
+            showToast('❌ Error aplicando referencia', 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error de conexión', 'error');
+    } finally {
+        if (overlay) overlay.classList.remove('active');
     }
 }

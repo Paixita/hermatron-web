@@ -130,6 +130,17 @@
                         </details>
                     </div>
 
+                    <div class="form-group" style="margin-top: 15px; margin-bottom: 20px;">
+                        <label>🎵 Música de Fondo</label>
+                        <div class="music-selector-container" style="display: flex; gap: 10px; align-items: center; background: var(--fondo-terciario); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--borde);">
+                            <input type="file" id="bgmFileInput" accept="audio/*" style="display:none" onchange="subirMusicaDeFondo(this.files[0])">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('bgmFileInput').click()" style="padding: 4px 8px; font-size: 0.8rem;">📤 Subir Audio</button>
+                            <span id="bgmFileName" style="font-size: 0.85rem; color: var(--texto-secundario); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Sin música</span>
+                            <button type="button" id="btnRemoveBgm" class="btn btn-sm btn-danger" style="display:none; padding: 2px 6px; font-size: 0.75rem; border-radius: 4px;" onclick="removerMusicaDeFondo()">✕</button>
+                            <input type="hidden" id="bgmPathSelected" value="">
+                        </div>
+                    </div>
+
                     <button class="btn btn-primary btn-crear-video-studio" onclick="crearVideoDesdeStudio()">
                         🚀 Crear Video Profesional
                     </button>
@@ -137,6 +148,14 @@
 
                 <div class="sidebar-tips">
                     <p>💡 <strong>Tip:</strong> Describe los colores, el tipo de cámara (macro, dron) y la emoción para un video increíble.</p>
+                </div>
+
+                <div class="sidebar-section" style="margin-top: 20px; border-top: 1px solid var(--borde); padding-top: 15px;">
+                    <h3>👥 Elenco de Personajes</h3>
+                    <div id="characterList" class="character-gallery-sidebar" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; max-height: 250px; overflow-y: auto;">
+                        <!-- Tarjetas de personajes cargadas -->
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-block btn-sm" onclick="abrirModalNuevoPersonaje()" style="width:100%">➕ Agregar Personaje</button>
                 </div>
             </aside>
 
@@ -256,6 +275,33 @@
                     </div>
                 </div>
             </aside>
+        </div>
+    </div>
+
+    <!-- Modal Nuevo Personaje -->
+    <div id="modalPersonaje" class="studio-modal" style="display:none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center;">
+        <div class="modal-content" style="background-color: var(--fondo-secundario); padding: 25px; border-radius: 12px; width: 90%; max-width: 450px; border: 1px solid var(--borde); position: relative; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+            <span class="modal-close" onclick="cerrarModalPersonaje()" style="position: absolute; right: 15px; top: 10px; font-size: 1.8rem; color: var(--texto-secundario); cursor: pointer; transition: color 0.2s;">&times;</span>
+            <h3 style="margin-bottom: 20px; font-size: 1.3rem; display: flex; align-items: center; gap: 8px;">👥 Registrar Nuevo Personaje</h3>
+            <form id="formPersonaje" onsubmit="guardarPersonaje(event)">
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="charName" style="display: block; margin-bottom: 5px; font-weight: 500; font-size: 0.85rem;">Nombre del Personaje</label>
+                    <input type="text" id="charName" placeholder="Ej: Julián" class="input-form" style="width: 100%; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px;" required>
+                </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="charDesc" style="display: block; margin-bottom: 5px; font-weight: 500; font-size: 0.85rem;">Descripción Física (Etnia, Edad, Ropa)</label>
+                    <textarea id="charDesc" placeholder="Ej: Niño de raza negra, 8 años, cara inocente, ojos expresivos." class="textarea-form" style="width: 100%; height: 60px; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px; resize: none;" required></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label for="charPrompt" style="display: block; margin-bottom: 5px; font-weight: 500; font-size: 0.85rem;">Prompt de Referencia en Inglés (Consistencia de Rostro)</label>
+                    <textarea id="charPrompt" placeholder="Ej: 8-year-old Afro-Colombian black boy, short curly black hair, expressive eyes, Pixar style" class="textarea-form" style="width: 100%; height: 60px; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px; resize: none;" required></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label for="charImage" style="display: block; margin-bottom: 5px; font-weight: 500; font-size: 0.85rem;">Imagen de Referencia (Diseñada/Subida)</label>
+                    <input type="file" id="charImage" accept="image/*" class="input-form" style="width: 100%; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 6px 12px; border-radius: 6px;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" style="width: 100%; padding: 10px; font-weight: 600;">💾 Guardar Personaje</button>
+            </form>
         </div>
     </div>
 

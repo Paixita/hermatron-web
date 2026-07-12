@@ -45,6 +45,18 @@ class MemoriaDB:
                 )
             """)
             
+            # Tabla de personajes
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS personajes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT UNIQUE NOT NULL,
+                    descripcion_fisica TEXT NOT NULL,
+                    prompt_referencia TEXT,
+                    imagen_path TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # Tabla de configuración
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS config (
@@ -263,6 +275,43 @@ class MemoriaDB:
             return output.getvalue()
         else:
             return json.dumps(historial, indent=2, ensure_ascii=False)
+
+    async def guardar_personaje(self, nombre: str, descripcion_fisica: str, prompt_referencia: str, imagen_path: str = None):
+        """Guardar o actualizar un personaje"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT OR REPLACE INTO personajes (nombre, descripcion_fisica, prompt_referencia, imagen_path)
+                VALUES (?, ?, ?, ?)
+            """, (nombre, descripcion_fisica, prompt_referencia, imagen_path))
+            await db.commit()
+
+    async def obtener_personaje(self, nombre: str) -> Optional[dict]:
+        """Obtener un personaje por su nombre"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM personajes WHERE nombre = ?", (nombre,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
+    async def obtener_todos_personajes(self) -> list[dict]:
+        """Obtener todos los personajes de la base de datos"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM personajes ORDER BY nombre ASC") as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def eliminar_personaje(self, nombre: str):
+        """Eliminar un personaje"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM personajes WHERE nombre = ?", (nombre,))
+            await db.commit()
 
 
 # Instancia global

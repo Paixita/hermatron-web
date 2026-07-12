@@ -39,10 +39,11 @@ def crear_clip_imagen(imagen_path: str, duracion: float, width: int, height: int
         print(f"[FFMPEG] Error creando clip: {e}")
         raise
 
-def concatenar_segmentos(segmentos: List[str], output_path: str, audio_path: str = None) -> None:
+def concatenar_segmentos(segmentos: List[str], output_path: str, audio_path: str = None, bgm_path: str = None) -> None:
     """
     Concatena varios clips de video usando el demuxer de FFmpeg.
     Si se proporciona audio_path, lo mezcla con el video.
+    Si se proporciona bgm_path, mezcla la música de fondo con auto-ducking.
     """
     if not segmentos:
         return
@@ -81,11 +82,30 @@ def concatenar_segmentos(segmentos: List[str], output_path: str, audio_path: str
                 except OSError:
                     time.sleep(1)
             
-            cmd_audio = [
-                "ffmpeg", "-y", "-i", temp_video, "-i", audio_path,
-                "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
-                output_path
-            ]
+            if bgm_path and os.path.exists(bgm_path):
+                # Mezcla con auto-ducking usando sidechaincompress
+                cmd_audio = [
+                    "ffmpeg", "-y",
+                    "-i", temp_video,
+                    "-i", audio_path,
+                    "-i", bgm_path,
+                    "-filter_complex", (
+                        "[1:a]volume=1.0[voice];"
+                        "[2:a]volume=0.20[bg];"
+                        "[bg][voice]sidechaincompress=threshold=0.08:ratio=5:attack=100:release=600[bg_ducked];"
+                        "[voice][bg_ducked]amix=inputs=2:duration=first[a]"
+                    ),
+                    "-c:v", "copy", "-c:a", "aac",
+                    "-map", "0:v:0", "-map", "[a]",
+                    output_path
+                ]
+            else:
+                # Mezcla simple de voz
+                cmd_audio = [
+                    "ffmpeg", "-y", "-i", temp_video, "-i", audio_path,
+                    "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
+                    output_path
+                ]
             # Aumentamos a 1800s (30 min) para el merge final de audio
             subprocess.run(cmd_audio, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
             if os.path.exists(temp_video):

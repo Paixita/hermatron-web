@@ -307,11 +307,19 @@ Analiza este tema como director de cine profesional.
         estilo = analisis.get("estilo_visual", "cinematográfico")
         atmosfera = analisis.get("atmosfera", "profesional")
 
+        # Cargar personajes de la base de datos para inyectar su consistencia en el prompt del sistema
+        personajes = await memoria.obtener_todos_personajes()
+        personajes_info = ""
+        if personajes:
+            personajes_info = "\nFICHA DE PERSONAJES REGISTRADOS (OBLIGATORIO RESPETAR SUS ETNIAS Y RASGOS EN CADA ESCENA):\n"
+            for p in personajes:
+                personajes_info += f"- {p['nombre']}: {p['descripcion_fisica']} (Prompt de referencia en inglés: {p['prompt_referencia']})\n"
+
         # Generar guión + escenas diseñadas
         system_prompt = f"""
 Actúa como un DIRECTOR DE CINE e INGENIEIRO DE PROMPTS DE ÉLITE (Arquitecto Visual).
 Tu objetivo es transformar la idea del usuario en un video largo de ultra-alta fidelidad con una narrativa envolvente.
-
+{personajes_info}
 🛠 ESTRUCTURA DE PENSAMIENTO (Arquitecto Visual)
 Cada escena debe seguir este orden lógico para las descripciones visuales:
 1. Núcleo de la Escena (Sujeto): Define quién o qué es el protagonista con adjetivos específicos.
@@ -642,13 +650,11 @@ Responde SOLO JSON:
         else:
             proyecto.audio_path = None
 
-        self._guardar_proyecto(proyecto)
-
-        self._actualizar_estado(proyecto_id, VideoEstado.ENSAMBLANDO)
-        self._actualizar_progreso(proyecto_id, 95)
+        # Obtener música de fondo si existe en la metadata del proyecto
+        bgm_path = proyecto.metadata.get("bgm_path") if proyecto.metadata else None
 
         video_final = await self._ensamblar_video(
-            proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion
+            proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion, bgm_path=bgm_path
         )
         
         if not video_final or not Path(video_final).exists():
@@ -1445,7 +1451,7 @@ Responde SOLO JSON:
                 return ok_st and Path(out_path).exists()
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
-                                audio_path: Optional[str], escenas: list, resolucion: str = "1080") -> Optional[str]:
+                               audio_path: Optional[str], escenas: list, resolucion: str = "1080", bgm_path: Optional[str] = None) -> Optional[str]:
         """Ensamblar video con Ken Burns zoom + subtítulos sincronizados (FFmpeg nativo)"""
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
         proyecto = self._cargar_proyecto(proyecto_id)
@@ -1515,7 +1521,7 @@ Responde SOLO JSON:
                 # Concatenar y aplicar audio
                 self._actualizar_progreso(proyecto_id, 97)
                 # Aumentamos el timeout a 900s (15 min) para videos de 10 minutos
-                await asyncio.to_thread(concatenar_segmentos, clips_streaming, str(video_final), audio_path)
+                await asyncio.to_thread(concatenar_segmentos, clips_streaming, str(video_final), audio_path, bgm_path)
                 
                 # Limpieza exhaustiva
                 for c in clips_streaming:
@@ -1624,12 +1630,29 @@ Responde SOLO JSON:
             cmd_final = ["ffmpeg", "-y", "-i", str(video_base)]
             if audio_path and Path(audio_path).exists():
                 cmd_final += ["-i", str(audio_path)]
-            cmd_final += [
-                "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
-                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"
-            ]
-            if audio_path and Path(audio_path).exists():
-                cmd_final += ["-c:a", "aac"]
+                if bgm_path and Path(bgm_path).exists():
+                    cmd_final += ["-i", str(bgm_path)]
+                    cmd_final += [
+                        "-filter_complex", (
+                            "[1:a]volume=1.0[voice];"
+                            "[2:a]volume=0.20[bg];"
+                            "[bg][voice]sidechaincompress=threshold=0.08:ratio=5:attack=100:release=600[bg_ducked];"
+                            "[voice][bg_ducked]amix=inputs=2:duration=first[a];"
+                            f"[0:v]subtitles='{srt_esc}':force_style='{sub_style}'[v]"
+                        ),
+                        "-map", "[v]", "-map", "[a]"
+                    ]
+                else:
+                    cmd_final += [
+                        "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
+                        "-map", "0:v:0", "-map", "1:a:0"
+                    ]
+                cmd_final += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+            else:
+                cmd_final += [
+                    "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"
+                ]
             cmd_final.append(str(video_final))
 
             print("[VIDEO] Aplicando SRT + audio...")
