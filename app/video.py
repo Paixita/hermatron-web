@@ -1612,6 +1612,11 @@ Responde SOLO JSON:
         recurso_path_obj = Path(recurso_path)
         is_video = recurso_path_obj.suffix.lower() in ('.mp4', '.avi', '.mov', '.mkv', '.webm')
         
+        # Calcular parámetros de fade seguros (nunca negativos ni mayores que la duración del clip)
+        fade_in_d = min(0.3, duracion / 2.0)
+        fade_out_d = min(0.3, duracion / 2.0)
+        fade_out_st = max(0.0, duracion - fade_out_d)
+
         if is_video:
             # Video: hacemos un loop infinito del recurso, lo recortamos a la duración exacta y aplicamos filtros cinemáticos
             vf_video = (
@@ -1620,8 +1625,8 @@ Responde SOLO JSON:
                 f"noise=alls=4:allf=t," # Mismo grano analógico activo
                 f"eq=contrast=1.05:saturation=1.05," # Contraste sutil
                 f"colorbalance=rs=0.03:bs=-0.03," # Tono cálido
-                f"vignette=angle=PI/5," # Viñeta cinematográfica
-                f"fade=t=in:st=0:d=0.3,fade=t=out:st={duracion - 0.3:.3f}:d=0.3" # Transición suave
+                f"vignette," # Viñeta cinematográfica (default seguro)
+                f"fade=t=in:st=0:d={fade_in_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}" # Transición suave segura
             )
             cmd = [
                 "ffmpeg", "-y",
@@ -1684,8 +1689,8 @@ Responde SOLO JSON:
                     f"noise=alls=4:allf=t," # Grano analógico activo
                     f"eq=contrast=1.05:saturation=1.05," # Ajuste sutil
                     f"colorbalance=rs=0.03:bs=-0.03," # Tono cálido
-                    f"vignette=angle=PI/5," # Viñeta cinematográfica
-                    f"fade=t=in:st=0:d=0.3,fade=t=out:st={duracion - 0.3:.3f}:d=0.3" # Fundido suave
+                    f"vignette," # Viñeta cinematográfica (default seguro)
+                    f"fade=t=in:st=0:d={fade_in_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}" # Fundido suave seguro
                 )
             else: # Horizontal
                 vf_zoom = (
@@ -1697,8 +1702,8 @@ Responde SOLO JSON:
                     f"noise=alls=4:allf=t,"
                     f"eq=contrast=1.05:saturation=1.05,"
                     f"colorbalance=rs=0.03:bs=-0.03,"
-                    f"vignette=angle=PI/5,"
-                    f"fade=t=in:st=0:d=0.3,fade=t=out:st={duracion - 0.3:.3f}:d=0.3" # Fundido suave
+                    f"vignette,"
+                    f"fade=t=in:st=0:d={fade_in_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}" # Fundido suave seguro
                 )
             cmd_clip = [
                 "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.4f}",
