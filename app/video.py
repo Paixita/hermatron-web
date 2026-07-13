@@ -746,13 +746,14 @@ Responde SOLO JSON:
         # Obtener música de fondo si existe en el proyecto
         bgm_path = proyecto.bgm_path
 
-        video_final = await self._ensamblar_video(
+        video_final, error_msg = await self._ensamblar_video(
             proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion, bgm_path=bgm_path
         )
         
         if not video_final or not Path(video_final).exists():
-             print("[VIDEO] Error crítico: El ensamblaje no generó archivo.")
-             self._actualizar_estado(proyecto_id, VideoEstado.ERROR, "Error en ensamblaje de FFmpeg")
+             error_desc = error_msg or "Error en ensamblaje de FFmpeg"
+             print(f"[VIDEO] Error crítico: {error_desc}")
+             self._actualizar_estado(proyecto_id, VideoEstado.ERROR, error_desc)
              return ""
 
         self._actualizar_progreso(proyecto_id, 100)
@@ -1605,9 +1606,10 @@ Responde SOLO JSON:
             return False, str(e)
 
 
-    def _crear_clip_segmento(self, recurso_path: str, duracion: float, w: int, h: int, out_path: str, fps: int = 30, i: int = 0) -> bool:
+    def _crear_clip_segmento(self, recurso_path: str, duracion: float, w: int, h: int, out_path: str, fps: int = 30, i: int = 0) -> tuple:
         """
         Crea un segmento de video de FFmpeg a partir de una imagen (con zoompan) o de un video (en bucle y redimensionado).
+        Retorna (exito: bool, error_msg: str)
         """
         recurso_path_obj = Path(recurso_path)
         is_video = recurso_path_obj.suffix.lower() in ('.mp4', '.avi', '.mov', '.mkv', '.webm')
@@ -1639,7 +1641,7 @@ Responde SOLO JSON:
                 out_path
             ]
             ok, err = self._run_ffmpeg(cmd)
-            return ok and Path(out_path).exists()
+            return ok and Path(out_path).exists(), err if not ok else ""
         else:
             # Imagen: zoompan dinámico + overlays analógicos de cine local
             import random
@@ -1713,7 +1715,7 @@ Responde SOLO JSON:
             ]
             ok, err = self._run_ffmpeg(cmd_clip)
             if ok and Path(out_path).exists():
-                return True
+                return True, ""
             else:
                 print(f"[FFMPEG PRIMARY ERR] {err}")
                 # Fallback estático simple
@@ -1727,10 +1729,10 @@ Responde SOLO JSON:
                 ok_st, err_st = self._run_ffmpeg(cmd_st)
                 if not ok_st:
                     print(f"[FFMPEG FALLBACK ERR] {err_st}")
-                return ok_st and Path(out_path).exists()
+                return ok_st and Path(out_path).exists(), f"Primario: {err[:150]}. Fallback: {err_st[:150]}" if not ok_st else ""
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
-                               audio_path: Optional[str], escenas: list, resolucion: str = "1080", bgm_path: Optional[str] = None) -> Optional[str]:
+                               audio_path: Optional[str], escenas: list, resolucion: str = "1080", bgm_path: Optional[str] = None) -> tuple:
         """Ensamblar video con Ken Burns zoom + subtítulos sincronizados (FFmpeg nativo)"""
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
         proyecto = self._cargar_proyecto(proyecto_id)
@@ -1750,7 +1752,7 @@ Responde SOLO JSON:
 
         if not imagenes:
             print("[VIDEO] Sin recursos visuales (imágenes ni videos)")
-            return None
+            return None, "Sin recursos visuales (imágenes ni videos)"
 
         print(f"[VIDEO] Ensamblando {len(imagenes)} escenas con zoom + SRT a {resolucion}p...")
 
@@ -1787,6 +1789,7 @@ Responde SOLO JSON:
                 
                 clips_streaming = []
                 total_clips = len(imagenes)
+                last_stream_err = "Error en streaming"
                 for i, (img_path, _) in enumerate(imagenes):
                     # Progreso entre 90 y 96%
                     pct_streaming = 90 + int((i / total_clips) * 6)
@@ -1794,9 +1797,15 @@ Responde SOLO JSON:
                     
                     dur_escena = duraciones_escenas[i]
                     clip_path = work_dir / f"clip_stream_{i:02d}.mp4"
-                    await asyncio.to_thread(self._crear_clip_segmento, img_path, dur_escena, width, height, str(clip_path), 30, i)
-                    clips_streaming.append(str(clip_path))
+                    ok, err = await asyncio.to_thread(self._crear_clip_segmento, img_path, dur_escena, width, height, str(clip_path), 30, i)
+                    if ok:
+                        clips_streaming.append(str(clip_path))
+                    else:
+                        last_stream_err = err
                 
+                if not clips_streaming:
+                    return None, f"No se generó ningún clip en streaming. Último error: {last_stream_err}"
+
                 # Concatenar y aplicar audio
                 self._actualizar_progreso(proyecto_id, 97)
                 # Aumentamos el timeout a 900s (15 min) para videos de 10 minutos
@@ -1811,7 +1820,7 @@ Responde SOLO JSON:
                 concat_txt = work_dir / "concat.txt"
                 if concat_txt.exists(): concat_txt.unlink()
                 
-                return str(video_final)
+                return str(video_final), None
 
             # Mapa de resoluciones
             res_map = {
@@ -1839,6 +1848,7 @@ Responde SOLO JSON:
             clips = []
             total_escenas = len(imagenes)
 
+            last_err = "Error al inicializar clips"
             for i, (img_path, _) in enumerate(imagenes):
                 # Progreso entre 91 y 96%
                 pct_assembly = 91 + int((i / total_escenas) * 5)
@@ -1848,14 +1858,16 @@ Responde SOLO JSON:
                 dur_clip = dur_escena + 1.0 # Colchón de 1 segundo para evitar cortes
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
                 
-                ok = await asyncio.to_thread(self._crear_clip_segmento, img_path, dur_clip, w, h, str(clip_path), fps, i)
+                ok, err = await asyncio.to_thread(self._crear_clip_segmento, img_path, dur_clip, w, h, str(clip_path), fps, i)
                 if ok:
                     clips.append(str(clip_path))
                 else:
-                    print(f"[VIDEO] Fallo crítico ensamblando escena {i}")
+                    last_err = err
+                    print(f"[VIDEO] Fallo crítico ensamblando escena {i}: {err}")
 
             if not clips:
-                print("[VIDEO] No se generó ningún clip"); return None
+                print(f"[VIDEO] No se generó ningún clip. Último error: {last_err}")
+                return None, f"No se pudo generar ningún clip de escena. Detalle: {last_err}"
 
             # ── PASO 2: concatenar clips ──────────────────────────────
             concat_path = work_dir / "clips.txt"
@@ -1870,7 +1882,8 @@ Responde SOLO JSON:
                 "-i", str(concat_path), "-c", "copy", str(video_base)
             ])
             if not ok or not video_base.exists():
-                print(f"[VIDEO] Concat error: {err[:150]}"); return None
+                print(f"[VIDEO] Concat error: {err[:150]}")
+                return None, f"Error concatenando clips: {err[:150]}"
 
             # ── PASO 3: SRT sincronizado ──────────────────────────────
             self._actualizar_progreso(proyecto_id, 98)
@@ -1958,14 +1971,15 @@ Responde SOLO JSON:
 
             if ok and video_final.exists():
                 print(f"[VIDEO] Completado: {video_final}")
-                return str(video_final)
+                return str(video_final), None
             else:
-                print(f"[VIDEO] Error final: {err[:200]}"); return None
+                print(f"[VIDEO] Error final: {err[:200]}")
+                return None, f"Error final en multiplexación: {err[:200]}"
 
         except Exception as e:
             print(f"[VIDEO] Excepción en ensamblaje: {e}")
             import traceback; traceback.print_exc()
-            return None
+            return None, f"Excepción en ensamblaje: {str(e)}"
 
     def _generar_srt(self, imagenes: list, duraciones_escenas: list) -> str:
         """SRT con timing proporcional a caracteres — sincronizado con el audio"""
