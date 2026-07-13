@@ -21,7 +21,8 @@ from utils.ffmpeg_helper import crear_clip_imagen, concatenar_segmentos
 from app.config import (
     BASE_DIR, PEXELS_API_KEY, ELEVENLABS_API_KEY, UNSPLASH_ACCESS_KEY,
     TRANSLATION_CACHE_TTL, MAX_IN_MEMORY_DURATION, IMAGE_RESOLUTIONS,
-    TRANSLATION_CACHE_PATH, GROQ_MODEL, GOOGLE_API_KEY, GEMINI_SAFETY_MODE
+    TRANSLATION_CACHE_PATH, GROQ_MODEL, GOOGLE_API_KEY, GEMINI_SAFETY_MODE,
+    FAL_KEY
 )
 from google import genai
 from google.genai import types
@@ -941,36 +942,51 @@ Responde SOLO JSON:
                     )
                     exito_imagen = True
                     fuente_usada = "placeholder"
-            
+
             exito_video = False
-            mochi_space = os.getenv("MOCHI_HF_SPACE")
-            
-            # 1. Intentar Mochi 1 Image-to-Video si está configurado
-            if mochi_space and exito_imagen and fuente_usada != "placeholder":
-                print(f"[VIDEO] Intentando animar imagen base con Mochi 1 I2V para escena {num_escena}...")
-                exito_video = await self._generar_video_mochi(query_mejorado, str(img_path), str(video_path))
+
+            # 🎬 CASCADA DE GENERACIÓN DE VIDEO CON PERSONAJES EN MOVIMIENTO REAL
+            # Prioridad 1: fal.ai (WAN I2V → LTX → Mochi) — Video real con personajes animados
+            if exito_imagen and FAL_KEY:
+                print(f"[VIDEO] 🎬 Generando video con personajes en movimiento real (fal.ai) para escena {num_escena}...")
+                exito_video = await self._generar_video_fal(
+                    query_mejorado, str(img_path), str(video_path), width, height
+                )
                 if exito_video:
-                    fuente_usada = "mochi"
+                    fuente_usada = "fal_ai"
                     for e_orig in proyecto.escenas_disenadas:
                         if e_orig.get("numero") == num_escena:
                             e_orig["imagen_path"] = str(video_path)
-            
-            # 2. Intentar Google Veo 3.1 Text-to-Video
+                    print(f"[VIDEO] ✅ Escena {num_escena} — Video real generado con fal.ai")
+
+            # Prioridad 2: Mochi 1 via Hugging Face Space (legado)
+            mochi_space = os.getenv("MOCHI_HF_SPACE")
+            if not exito_video and mochi_space and exito_imagen and fuente_usada != "placeholder":
+                print(f"[VIDEO] Intentando Mochi 1 HF Space para escena {num_escena}...")
+                exito_video = await self._generar_video_mochi(query_mejorado, str(img_path), str(video_path))
+                if exito_video:
+                    fuente_usada = "mochi_hf"
+                    for e_orig in proyecto.escenas_disenadas:
+                        if e_orig.get("numero") == num_escena:
+                            e_orig["imagen_path"] = str(video_path)
+
+            # Prioridad 3: Google Veo 3.1 (requiere créditos de pago)
             if not exito_video and GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
-                print(f"[VIDEO] Intentando generar video con Veo 3.1 para escena {num_escena}...")
+                print(f"[VIDEO] Intentando Google Veo 3.1 para escena {num_escena}...")
                 exito_video = await self._generar_video_veo(query_mejorado, str(video_path), width, height)
                 if exito_video:
                     fuente_usada = "veo"
                     for e_orig in proyecto.escenas_disenadas:
                         if e_orig.get("numero") == num_escena:
                             e_orig["imagen_path"] = str(video_path)
-            
-            # 3. Si no hay video, usar la imagen estática generada
+
+            # Fallback: usar imagen estática (se animará con Ken Burns en el ensamblaje)
             if not exito_video:
+                print(f"[VIDEO] ⚠️ Sin video para escena {num_escena} — se usará imagen estática con Ken Burns")
                 for e_orig in proyecto.escenas_disenadas:
                     if e_orig.get("numero") == num_escena:
                         e_orig["imagen_path"] = str(img_path)
-            
+
             # Guardar metadata (SIEMPRE, sin importar la fuente)
             with open(escena_dir / "metadata.json", "w", encoding="utf-8") as f:
                 json.dump({
@@ -986,9 +1002,9 @@ Responde SOLO JSON:
 
             self._actualizar_progreso(proyecto_id, 65 + int((i + 1) / total * 15))
             fuente_usada = "placeholder"  # Reset para siguiente escena
-            
-            # Pequeña pausa para no saturar la API gratuita de Pollinations
-            await asyncio.sleep(1.5)
+
+            # Pequeña pausa para no saturar las APIs
+            await asyncio.sleep(1.0)
         
         self._guardar_proyecto(proyecto)
         print(f"[VIDEO]  {total} escenas procesadas y guardadas")
@@ -1122,6 +1138,124 @@ Responde SOLO JSON:
             return False
         except Exception as e:
             print(f"[GEMINI] Error en generación de imagen: {e}")
+            return False
+
+    async def _generar_video_fal(self, prompt: str, imagen_path: str, ruta_salida: str, width: int = 1920, height: int = 1080) -> bool:
+        """
+        Generación de vídeo con personajes en MOVIMIENTO REAL usando fal.ai.
+        Cascada de modelos:
+          1. fal-ai/wan/v2.2/image-to-video  — Mejor para animar personajes existentes
+          2. fal-ai/ltx-video/image-to-video — Rápido y cinematográfico
+          3. fal-ai/mochi-v1                 — Alta calidad de movimiento
+        Requiere FAL_KEY en .env
+        """
+        if not FAL_KEY:
+            print("[FAL] No hay FAL_KEY configurada, saltando fal.ai.")
+            return False
+
+        try:
+            import fal_client
+            import httpx
+            import shutil
+
+            # Configurar la key de fal.ai
+            os.environ["FAL_KEY"] = FAL_KEY
+
+            ar = "16:9"
+            if height > width:
+                ar = "9:16"
+            elif width == height:
+                ar = "1:1"
+
+            # Traducir prompt al inglés para mejor calidad (los modelos de video son en inglés)
+            prompt_en = await self._traducir_prompt(prompt)
+            print(f"[FAL] Prompt en inglés: {prompt_en[:80]}...")
+
+            # Lista de modelos a intentar en orden
+            modelos = [
+                {
+                    "id": "fal-ai/wan/v2.2/image-to-video",
+                    "args": {
+                        "prompt": prompt_en,
+                        "image_url": imagen_path,
+                        "num_frames": 81,  # ~5 segundos a ~16fps
+                        "frames_per_second": 16,
+                        "resolution": "720p",
+                        "enable_safety_checker": False,
+                    }
+                },
+                {
+                    "id": "fal-ai/ltx-video/image-to-video",
+                    "args": {
+                        "prompt": prompt_en,
+                        "image_url": imagen_path,
+                        "num_frames": 121,
+                        "frames_per_second": 25,
+                        "enable_safety_checker": False,
+                    }
+                },
+                {
+                    "id": "fal-ai/mochi-v1",
+                    "args": {
+                        "prompt": prompt_en,
+                        "num_frames": 84,
+                        "enable_safety_checker": False,
+                    }
+                },
+            ]
+
+            for modelo in modelos:
+                try:
+                    model_id = modelo["id"]
+                    print(f"[FAL] Intentando {model_id}...")
+
+                    # Subir imagen a fal.ai si es una ruta local
+                    args = modelo["args"].copy()
+                    if "image_url" in args and os.path.exists(args["image_url"]):
+                        print(f"[FAL] Subiendo imagen a fal.ai CDN...")
+                        img_url = await asyncio.to_thread(
+                            fal_client.upload_file, args["image_url"]
+                        )
+                        args["image_url"] = img_url
+                        print(f"[FAL] Imagen subida: {img_url[:60]}...")
+
+                    # Llamar al modelo
+                    result = await asyncio.to_thread(
+                        fal_client.run,
+                        model_id,
+                        arguments=args
+                    )
+
+                    # Extraer la URL del video del resultado
+                    video_url = None
+                    if isinstance(result, dict):
+                        video_url = (
+                            result.get("video", {}).get("url") or
+                            result.get("video_url") or
+                            (result.get("videos") or [{}])[0].get("url")
+                        )
+
+                    if video_url:
+                        print(f"[FAL] ✅ Video generado con {model_id}. Descargando...")
+                        async with httpx.AsyncClient(timeout=120.0) as hc:
+                            resp = await hc.get(video_url)
+                            if resp.status_code == 200:
+                                with open(ruta_salida, "wb") as f:
+                                    f.write(resp.content)
+                                print(f"[FAL] ✅ Video guardado ({len(resp.content)//1024} KB): {ruta_salida}")
+                                return True
+
+                    print(f"[FAL] {model_id} no devolvió video URL válida: {result}")
+
+                except Exception as e_modelo:
+                    print(f"[FAL] {model_id} falló: {e_modelo}")
+                    continue
+
+            print("[FAL] Todos los modelos de fal.ai fallaron.")
+            return False
+
+        except Exception as e:
+            print(f"[FAL] Error general: {e}")
             return False
 
     async def _generar_video_veo(self, prompt: str, ruta_salida: str, width: int = 1920, height: int = 1080) -> bool:

@@ -33,3 +33,6 @@ Pillow          # Generar imágenes/thumbnails
 google-cloud-translate>=3.0.0
 google-genai>=1.0.0
 gradio-client>=0.17.0
+
+# Generación de video con personajes en movimiento (fal.ai — WAN I2V / LTX / Mochi)
+fal-client>=1.0.0
