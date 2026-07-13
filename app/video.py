@@ -32,6 +32,7 @@ from app.memoria import memoria
 from app.agents.consistency_agent import consistency_agent   # Consistencia visual de personajes
 from app.agents.quality_agent import quality_agent, QualityAgent  # Revisión visual Gemini Vision
 from app.agents.assembly_agent import assembly_agent         # Ensamblaje con voces por personaje
+from app.agents.lipsync_agent import lipsync_agent           # 🎤 Lip-sync gratuito vía HuggingFace (SadTalker/Wav2Lip)
 
 
 # --- DIRECTORIO DE VIDEOS ---
@@ -1030,10 +1031,29 @@ Responde SOLO JSON:
         
         self._guardar_proyecto(proyecto)
         print(f"[VIDEO]  {total} escenas procesadas y guardadas")
-        
+
+        # 🎤 LIP-SYNC AGENT (SadTalker / Wav2Lip — 100% GRATIS vía HuggingFace)
+        # Toma cada imagen de personaje + su audio TTS y genera video con labios moviéndose
+        if lipsync_agent._gradio_disponible:
+            print(f"[MULTI-AGENTE] 🎤 LipSync Agent: Procesando sincronización labial "
+                  f"en {total} escenas (SadTalker / Wav2Lip gratis)...")
+            try:
+                escenas_con_lipsync = await lipsync_agent.procesar_escenas_con_lipsync(
+                    proyecto.escenas_disenadas, work_dir
+                )
+                proyecto.escenas_disenadas = escenas_con_lipsync
+                self._guardar_proyecto(proyecto)
+                print(f"[MULTI-AGENTE] ✅ LipSync Agent: Completado")
+            except Exception as e:
+                print(f"[MULTI-AGENTE] ⚠️ LipSync Agent falló (no crítico): {e}")
+        else:
+            print(f"[MULTI-AGENTE] ⚠️ LipSync Agent: gradio_client no disponible. "
+                  f"En el Codespace: pip install gradio_client")
+
         # Forzar liberación de memoria tras procesar muchas imágenes
         import gc
         gc.collect()
+
 
     async def _generar_video_mochi(self, prompt: str, imagen_path: str, ruta_salida: str) -> bool:
         """
