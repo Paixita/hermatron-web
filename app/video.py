@@ -28,6 +28,11 @@ from google import genai
 from google.genai import types
 from app.memoria import memoria
 
+# ── Agentes Multi-Agente (inspirados en ViMax) ────────────────────────────────
+from app.agents.consistency_agent import consistency_agent   # Consistencia visual de personajes
+from app.agents.quality_agent import quality_agent, QualityAgent  # Revisión visual Gemini Vision
+from app.agents.assembly_agent import assembly_agent         # Ensamblaje con voces por personaje
+
 
 # --- DIRECTORIO DE VIDEOS ---
 VIDEOS_DIR = BASE_DIR / "videos"
@@ -513,6 +518,12 @@ Diseña el video completo como director de cine.
             )
             escenas_disenadas.append(asdict(escena))
 
+        # 🎭 CONSISTENCY AGENT (ViMax): Blindar aspecto visual de personajes
+        # Garantiza que Julián, Hamilton, El Zarco, etc. tengan el mismo aspecto en TODAS las escenas
+        print(f"[MULTI-AGENTE] 🎭 Consistency Agent: Blindando personajes en {len(escenas_disenadas)} escenas...")
+        escenas_disenadas = consistency_agent.blindar_escenas(escenas_disenadas)
+        print(f"[MULTI-AGENTE] ✅ Consistency Agent: Consistencia visual aplicada")
+
         proyecto.escenas_disenadas = escenas_disenadas
         proyecto.estado = VideoEstado.EN_REVIEW
         self._guardar_proyecto(proyecto)
@@ -987,6 +998,16 @@ Responde SOLO JSON:
                     if e_orig.get("numero") == num_escena:
                         e_orig["imagen_path"] = str(img_path)
 
+            # ✅ QUALITY AGENT (ViMax): Revisar calidad visual de la imagen/video generado
+            if quality_agent.disponible and exito_imagen:
+                recurso_a_revisar = str(video_path) if exito_video and video_path.exists() else str(img_path)
+                desc_esperada = escena.get("descripcion_visual", "")[:300]
+                revision = await quality_agent.evaluar_imagen(recurso_a_revisar, desc_esperada, num_escena)
+                fuente_usada += f"_q{revision['puntaje']}"  # Añadir puntaje al metadata
+                if not revision["aprobada"]:
+                    print(f"[QUALITY] ⚠️ Escena {num_escena} con puntaje bajo ({revision['puntaje']}/10). "
+                          f"Razón: {revision['razon']}")
+
             # Guardar metadata (SIEMPRE, sin importar la fuente)
             with open(escena_dir / "metadata.json", "w", encoding="utf-8") as f:
                 json.dump({
@@ -1005,6 +1026,7 @@ Responde SOLO JSON:
 
             # Pequeña pausa para no saturar las APIs
             await asyncio.sleep(1.0)
+
         
         self._guardar_proyecto(proyecto)
         print(f"[VIDEO]  {total} escenas procesadas y guardadas")
