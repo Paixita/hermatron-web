@@ -1742,7 +1742,7 @@ Responde SOLO JSON:
 
     def _crear_clip_segmento(self, recurso_path: str, duracion: float, w: int, h: int, out_path: str, fps: int = 30, i: int = 0) -> tuple:
         """
-        Crea un segmento de video de FFmpeg a partir de una imagen (con zoompan) o de un video (en bucle y redimensionado).
+        Crea un segmento de video de FFmpeg a partir de una imagen o de un video (en bucle y redimensionado).
         Retorna (exito: bool, error_msg: str)
         """
         recurso_path_obj = Path(recurso_path)
@@ -1754,15 +1754,11 @@ Responde SOLO JSON:
         fade_out_st = max(0.0, duracion - fade_out_d)
 
         if is_video:
-            # Video: hacemos un loop infinito del recurso, lo recortamos a la duración exacta y aplicamos filtros cinemáticos
+            # Video real (generado por fal.ai / Veo / Mochi): loop + escalar + audio eliminado
             vf_video = (
                 f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},"
                 f"format=yuv420p,fps={fps},"
-                f"noise=alls=4:allf=t," # Mismo grano analógico activo
-                f"eq=contrast=1.05:saturation=1.05," # Contraste sutil
-                f"colorbalance=rs=0.03:bs=-0.03," # Tono cálido
-                f"vignette," # Viñeta cinematográfica (default seguro)
-                f"fade=t=in:st=0:d={fade_in_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}" # Transición suave segura
+                f"fade=t=in:st=0:d={fade_in_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}"
             )
             cmd = [
                 "ffmpeg", "-y",
@@ -1770,80 +1766,28 @@ Responde SOLO JSON:
                 "-i", recurso_path,
                 "-t", f"{duracion:.4f}",
                 "-vf", vf_video,
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
                 "-an",
                 out_path
             ]
             ok, err = self._run_ffmpeg(cmd)
             return ok and Path(out_path).exists(), err if not ok else ""
         else:
-            # Imagen: zoompan dinámico + overlays analógicos de cine local
-            import random
-            d_frames = int(duracion * fps)
-            d_frames_safe = d_frames + 10
-            
-            # Elegir movimiento aleatorio pero reproducible por escena
-            motion_types = ["zoom_in", "zoom_out", "pan_left", "pan_right", "tilt_up", "tilt_down"]
-            r = random.Random(i + 100)
-            motion = r.choice(motion_types)
-            
-            pan_zoom = "1.25"
-            if motion == "zoom_in":
-                zoom_expr = "zoom+0.0008"
-                x_expr = "trunc(iw/2-(iw/zoom/2))"
-                y_expr = "trunc(ih/2-(ih/zoom/2))"
-            elif motion == "zoom_out":
-                zoom_expr = "if(eq(on,1),1.15,max(1.0,zoom-0.0008))"
-                x_expr = "trunc(iw/2-(iw/zoom/2))"
-                y_expr = "trunc(ih/2-(ih/zoom/2))"
-            elif motion == "pan_left":
-                zoom_expr = pan_zoom
-                x_expr = f"trunc(max(0, 1-on/{d_frames_safe})*(iw-(iw/zoom)))"
-                y_expr = "trunc(ih/2-(ih/zoom/2))"
-            elif motion == "pan_right":
-                zoom_expr = pan_zoom
-                x_expr = f"trunc(min(1, on/{d_frames_safe})*(iw-(iw/zoom)))"
-                y_expr = "trunc(ih/2-(ih/zoom/2))"
-            elif motion == "tilt_up":
-                zoom_expr = pan_zoom
-                x_expr = "trunc(iw/2-(iw/zoom/2))"
-                y_expr = f"trunc(max(0, 1-on/{d_frames_safe})*(ih-(ih/zoom)))"
-            else: # tilt_down
-                zoom_expr = pan_zoom
-                x_expr = "trunc(iw/2-(iw/zoom/2))"
-                y_expr = f"trunc(min(1, on/{d_frames_safe})*(ih-(ih/zoom)))"
-                
-            print(f"[CINEMATIC ENGINE] Escena {i+1}: Aplicando movimiento {motion} con filtros analógicos...")
-
-            if h > w: # Vertical
-                vf_zoom = (
-                    f"scale=1080:1920:force_original_aspect_ratio=increase,"
-                    f"crop=1080:1920,"
-                    f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
-                    f"x='{x_expr}':y='{y_expr}':s=1080x1920:fps={fps},"
-                    f"scale={w}:{h},"
-                    f"noise=alls=4:allf=t," # Grano analógico activo
-                    f"eq=contrast=1.05:saturation=1.05," # Ajuste sutil
-                    f"colorbalance=rs=0.03:bs=-0.03," # Tono cálido
-                    f"vignette," # Viñeta cinematográfica (default seguro)
-                    f"fade=t=in:st=0:d={fade_in_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}" # Fundido suave seguro
-                )
-            else: # Horizontal
-                vf_zoom = (
-                    f"scale=1920:1080:force_original_aspect_ratio=increase,"
-                    f"crop=1920:1080,"
-                    f"zoompan=z='{zoom_expr}':d={d_frames_safe}:"
-                    f"x='{x_expr}':y='{y_expr}':s=1920x1080:fps={fps},"
-                    f"scale={w}:{h},"
-                    f"noise=alls=4:allf=t,"
-                    f"eq=contrast=1.05:saturation=1.05,"
-                    f"colorbalance=rs=0.03:bs=-0.03,"
-                    f"vignette,"
-                    f"fade=t=in:st=0:d={fade_in_d:.3f},fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}" # Fundido suave seguro
-                )
+            # Imagen estática: clip limpio SIN zoom ni movimiento artificial.
+            print(f"[CLIP] Escena {i+1}: Convirtiendo imagen a clip estático limpio (sin zoom)...")
+            vf_static = (
+                f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                f"crop={w}:{h},"
+                f"format=yuv420p,"
+                f"fps={fps},"
+                f"fade=t=in:st=0:d={fade_in_d:.3f},"
+                f"fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}"
+            )
             cmd_clip = [
-                "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.4f}",
-                "-i", recurso_path, "-vf", vf_zoom,
+                "ffmpeg", "-y", "-loop", "1",
+                "-t", f"{duracion:.4f}",
+                "-i", recurso_path,
+                "-vf", vf_static,
                 "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
                 "-t", f"{duracion:.4f}", out_path
             ]
@@ -1851,8 +1795,8 @@ Responde SOLO JSON:
             if ok and Path(out_path).exists():
                 return True, ""
             else:
-                print(f"[FFMPEG PRIMARY ERR] {err}")
-                # Fallback estático simple
+                print(f"[FFMPEG ERR] {err}")
+                # Fallback mínimo
                 cmd_st = [
                     "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.3f}",
                     "-i", recurso_path,
