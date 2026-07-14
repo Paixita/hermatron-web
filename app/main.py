@@ -1005,6 +1005,43 @@ async def api_eliminar_personaje(nombre: str):
     await memoria.eliminar_personaje(nombre)
     return {"status": "success", "message": f"Personaje {nombre} eliminado correctamente"}
 
+@app.put("/api/personajes/{nombre}/voz")
+async def api_actualizar_voz_personaje(nombre: str, datos: dict):
+    """Actualiza la voz edge-tts asignada a un personaje."""
+    nueva_voz = datos.get("voz_edge_tts", "").strip()
+    if not nueva_voz:
+        return {"status": "error", "message": "Voz no especificada"}
+    existente = await memoria.obtener_personaje(nombre)
+    if not existente:
+        return {"status": "error", "message": f"Personaje '{nombre}' no encontrado"}
+    await memoria.actualizar_voz_personaje(nombre, nueva_voz)
+    return {"status": "success", "message": f"Voz de {nombre} actualizada a {nueva_voz}"}
+
+@app.get("/api/voces")
+async def api_listar_voces():
+    """Lista todas las voces edge-tts disponibles en español para los personajes."""
+    voces = [
+        # 🇨🇴 Colombia
+        {"id": "es-CO-GonzaloNeural", "nombre": "Gonzalo (Colombia ♂️ Joven)", "genero": "masculino", "pais": "Colombia"},
+        {"id": "es-CO-SalomeNeural",  "nombre": "Salome (Colombia ♀️ Adulta)", "genero": "femenino",  "pais": "Colombia"},
+        # 🇲🇽 México
+        {"id": "es-MX-JorgeNeural",   "nombre": "Jorge (México ♂️ Joven)",   "genero": "masculino", "pais": "México"},
+        {"id": "es-MX-DaliaNeural",   "nombre": "Dalia (México ♀️ Joven)",   "genero": "femenino",  "pais": "México"},
+        {"id": "es-MX-LupeNeural",    "nombre": "Lupe (México ♀️ Adulta)",   "genero": "femenino",  "pais": "México"},
+        {"id": "es-MX-BeatrizNeural", "nombre": "Beatriz (México ♀️ Adulta)", "genero": "femenino",  "pais": "México"},
+        # 🇪🇸 España
+        {"id": "es-ES-AlvaroNeural",  "nombre": "Alvaro (España ♂️ Maduro)",  "genero": "masculino", "pais": "España"},
+        {"id": "es-ES-LuciaNeural",   "nombre": "Lucia (España ♀️ Joven)",   "genero": "femenino",  "pais": "España"},
+        {"id": "es-ES-ElviraNeural",  "nombre": "Elvira (España ♀️ Adulta)",  "genero": "femenino",  "pais": "España"},
+        # 🇺🇸 EE.UU (Español Latino)
+        {"id": "es-US-AlonsoNeural",  "nombre": "Alonso (EEUU ♂️ Urbano)",    "genero": "masculino", "pais": "EEUU"},
+        {"id": "es-US-PalomaNeural",  "nombre": "Paloma (EEUU ♀️ Joven)",     "genero": "femenino",  "pais": "EEUU"},
+        # 🇦🇷 Argentina
+        {"id": "es-AR-ElenaNeural",   "nombre": "Elena (Argentina ♀️)",       "genero": "femenino",  "pais": "Argentina"},
+        {"id": "es-AR-TomasNeural",   "nombre": "Tomás (Argentina ♂️)",      "genero": "masculino", "pais": "Argentina"},
+    ]
+    return {"voces": voces}
+
 @app.get("/api/video/proyectos")
 async def listar_videos(): 
     if not VIDEOS_DIR.exists(): return {"creaciones": [], "importados": [], "otros": []}

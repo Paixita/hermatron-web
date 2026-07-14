@@ -32,7 +32,8 @@ from app.memoria import memoria
 from app.agents.consistency_agent import consistency_agent   # Consistencia visual de personajes
 from app.agents.quality_agent import quality_agent, QualityAgent  # Revisión visual Gemini Vision
 from app.agents.assembly_agent import assembly_agent         # Ensamblaje con voces por personaje
-from app.agents.lipsync_agent import lipsync_agent           # 🎤 Lip-sync gratuito vía HuggingFace (SadTalker/Wav2Lip)
+from app.agents.lipsync_agent import lipsync_agent           # 🎤 Lip-sync gratuito vía HuggingFace
+from app.agents.style_agent import style_agent               # 🎨 Detección automática de estilo visual
 
 
 # --- DIRECTORIO DE VIDEOS ---
@@ -880,16 +881,17 @@ Responde SOLO JSON:
         fuente_usada = "placeholder"
         
         proyecto = self._cargar_proyecto(proyecto_id)
-        analisis = proyecto.analisis if (proyecto and hasattr(proyecto, 'analisis') and proyecto.analisis) else {}
-        estilo_visual = analisis.get("estilo_visual", "cinematic")
-        atmosfera = analisis.get("atmosfera", "professional")
         
         # ── COHERENCIA VISUAL: Seed compartido para TODO el proyecto ──
         # Todas las escenas usan el mismo seed para que Pollinations
         # genere imágenes con el mismo ADN artístico.
         project_seed = abs(hash(proyecto_id)) % 99999
-        style_prefix = f"{estilo_visual}, {atmosfera} atmosphere, consistent art style"
-        print(f"[VIDEO] Seed compartido del proyecto: {project_seed}, Estilo: {style_prefix}")
+        
+        # 🎨 STYLE AGENT: Detectar estilo visual desde el prompt/tema del proyecto
+        prompt_usuario = (proyecto.prompt or "") + " " + (proyecto.tema or "") if proyecto else ""
+        estilo_detectado = style_agent.detectar_estilo(prompt_usuario, proyecto.tema if proyecto else "")
+        style_prefix = style_agent.get_prompt_prefix(estilo_detectado["id"])
+        print(f"[STYLE AGENT] {estilo_detectado['emoji']} Estilo aplicado: {estilo_detectado['nombre']} | Seed: {project_seed}")
 
         # Obtener personajes registrados para consistencia multimodal
         try:

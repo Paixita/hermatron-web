@@ -1156,7 +1156,7 @@ async function cargarPersonajes() {
 function renderCharacterList() {
     const listDiv = document.getElementById('characterList');
     if (!listDiv) return;
-    
+
     if (window.personajes.length === 0) {
         listDiv.innerHTML = `
             <div style="font-size: 0.8rem; color: var(--texto-secundario); text-align: center; padding: 10px; background: var(--fondo-terciario); border-radius: 6px; border: 1px dashed var(--borde);">
@@ -1165,30 +1165,65 @@ function renderCharacterList() {
         `;
         return;
     }
-    
+
+    // Cargar voces disponibles (una sola vez)
+    if (!window._vocesDisponibles) {
+        fetch('/api/voces').then(r => r.json()).then(data => {
+            window._vocesDisponibles = data.voces || [];
+            renderCharacterList(); // Re-render con voces
+        }).catch(() => {
+            window._vocesDisponibles = [];
+        });
+        return;
+    }
+
+    const voces = window._vocesDisponibles;
+
     listDiv.innerHTML = '';
     window.personajes.forEach(p => {
+        const vozActual = p.voz_edge_tts || 'es-MX-JorgeNeural';
         const card = document.createElement('div');
-        card.style.display = 'flex';
-        card.style.alignItems = 'center';
-        card.style.justifyContent = 'space-between';
-        card.style.background = 'var(--fondo-terciario)';
-        card.style.padding = '8px';
-        card.style.borderRadius = '6px';
-        card.style.border = '1px solid var(--borde)';
-        card.style.gap = '8px';
-        
+        card.style.cssText = `
+            background: var(--fondo-terciario);
+            border: 1px solid var(--borde);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 4px;
+            transition: border-color 0.2s;
+        `;
+
         const photoUrl = p.imagen_path || 'https://via.placeholder.com/40?text=👤';
-        
+
+        // Construir opciones del selector de voz
+        const opcionesVoz = voces.map(v =>
+            `<option value="${v.id}" ${v.id === vozActual ? 'selected' : ''}>${v.nombre}</option>`
+        ).join('');
+
         card.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1;">
-                <img src="${photoUrl}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1px solid var(--borde);" onerror="this.src='https://via.placeholder.com/36?text=👤'">
-                <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; font-weight: 500;">
-                    <span style="display: block; color: var(--texto);">${p.nombre}</span>
-                    <span style="font-size: 0.7rem; color: var(--texto-secundario); display: block; overflow: hidden; text-overflow: ellipsis;">${p.descripcion_fisica}</span>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <img src="${photoUrl}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid var(--borde);" onerror="this.src='https://via.placeholder.com/36?text=👤'">
+                <div style="flex:1; overflow:hidden;">
+                    <span style="display:block; color:var(--texto); font-size:0.85rem; font-weight:600;">${p.nombre}</span>
+                    <span style="font-size:0.68rem; color:var(--texto-secundario); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.descripcion_fisica}</span>
                 </div>
+                <button type="button" style="padding:2px 6px; font-size:0.7rem; background:transparent; border:1px solid var(--borde); border-radius:4px; color:var(--texto-secundario); cursor:pointer;" onclick="eliminarPersonaje('${p.nombre}')" title="Eliminar">✕</button>
             </div>
-            <button type="button" class="btn btn-sm btn-danger" style="padding: 2px 6px; font-size: 0.75rem;" onclick="eliminarPersonaje('${p.nombre}')" title="Eliminar personaje">✕</button>
+
+            <!-- 🎙️ Selector de Voz -->
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:0.7rem; color:var(--texto-secundario); white-space:nowrap;">🎙️ Voz:</span>
+                <select id="voz_${p.nombre.replace(/\s/g,'_')}"
+                        onchange="actualizarVozPersonaje('${p.nombre}', this.value)"
+                        style="flex:1; font-size:0.72rem; padding:3px 6px;
+                               background:var(--fondo-secundario); color:var(--texto);
+                               border:1px solid var(--borde); border-radius:4px; cursor:pointer;">
+                    ${opcionesVoz}
+                </select>
+                <button type="button" title="Escuchar preview"
+                        onclick="probarVoz('${p.nombre}', '${vozActual}')"
+                        style="padding:3px 7px; font-size:0.75rem; background:var(--acento);
+                               color:white; border:none; border-radius:4px; cursor:pointer;">▶</button>
+            </div>
         `;
         listDiv.appendChild(card);
     });

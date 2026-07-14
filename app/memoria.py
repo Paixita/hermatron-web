@@ -53,6 +53,7 @@ class MemoriaDB:
                     descripcion_fisica TEXT NOT NULL,
                     prompt_referencia TEXT,
                     imagen_path TEXT,
+                    voz_edge_tts TEXT DEFAULT 'es-MX-JorgeNeural',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -100,7 +101,14 @@ class MemoriaDB:
                 await db.execute("ALTER TABLE chat_history ADD COLUMN conversacion_id TEXT DEFAULT 'default'")
             except:
                 pass
-                
+
+            # Migración: agregar columna voz_edge_tts si no existe (BD existentes)
+            try:
+                await db.execute("ALTER TABLE personajes ADD COLUMN voz_edge_tts TEXT DEFAULT 'es-MX-JorgeNeural'")
+                print("[DB] ✅ Columna voz_edge_tts agregada a personajes")
+            except:
+                pass  # Ya existía, no pasa nada
+
             await db.execute("UPDATE chat_history SET conversacion_id = 'default' WHERE conversacion_id IS NULL")
             await db.execute("INSERT OR IGNORE INTO conversaciones (id, titulo) VALUES ('default', 'Chat Principal')")
             
@@ -113,54 +121,62 @@ class MemoriaDB:
                             "Julián",
                             "Niño afrocolombiano de raza negra, de 8 años, con suéter amarillo limpio, pelo corto y rizado negro, expresión inocente y alegre.",
                             "8-year-old Afro-Colombian black boy, short curly black hair, innocent expressive face, clean yellow sweater, 3d style",
-                            "/static/personajes/Julian.png"
+                            "/static/personajes/Julian.png",
+                            "es-CO-GonzaloNeural"    # Voz: niño colombiano
                         ),
                         (
                             "Hamilton",
-                            "Joven mestizo y trigueño (mayor que Julián), muy elegante con camisa blanca impecable, ojos claros expresivos de color verde.",
+                            "Joven mestizo y trigeño (mayor que Julián), muy elegante con camisa blanca impecable, ojos claros expresivos de color verde.",
                             "Elegant light-skinned young Colombian boy, neat short dark hair, expressive light green eyes, neat white shirt, 3d style",
-                            "/static/personajes/Hamilton.png"
+                            "/static/personajes/Hamilton.png",
+                            "es-MX-JorgeNeural"      # Voz: joven masculino
                         ),
                         (
                             "El Zarco",
-                            "Joven mulato/trigueño de mirada intensa con ojos muy claros (celestes), bien vestido con chaqueta oscura moderna, junto a una moto Calima 175 azul.",
+                            "Joven mulato/trigeño de mirada intensa con ojos muy claros (celestes), bien vestido con chaqueta oscura moderna, junto a una moto Calima 175 azul.",
                             "Young Colombian mulatto guy, intense light blue eyes, stylish dark jacket, standing next to a classic blue Calima 175 motorcycle, 3d style",
-                            "/static/personajes/El_Zarco.png"
+                            "/static/personajes/El_Zarco.png",
+                            "es-US-AlonsoNeural"     # Voz: urbano juvenil
                         ),
                         (
                             "Rosalba",
                             "Madre de Julián, mujer de 43 años, afrocolombiana, bonita, elegante, de vestir sobrio y sonrisa maternal, muy sociable.",
                             "43-year-old Afro-Colombian woman, beautiful warm smile, elegant neat hair, modest nice dress, motherly expression, 3d style",
-                            "/static/personajes/Rosalba.png"
+                            "/static/personajes/Rosalba.png",
+                            "es-CO-SalomeNeural"     # Voz: femenina colombiana
                         ),
                         (
                             "Carlos",
                             "Padre de Julián, electricista de 45 años, afrocolombiano, contextura trabajadora, reparando neveras en su taller hogareño.",
                             "45-year-old Afro-Colombian man, working class physique, repairing domestic appliances in a home garage, 3d style",
-                            "/static/personajes/Carlos.png"
+                            "/static/personajes/Carlos.png",
+                            "es-ES-AlvaroNeural"     # Voz: masculino maduro
                         ),
                         (
                             "Vanessa",
-                            "Hermana mayor de Julián, de 18 años, bonita con piel clara/trigueña y ojos color miel, vistiendo camiseta veraniega y shorts.",
+                            "Hermana mayor de Julián, de 18 años, bonita con piel clara/trigeña y ojos color miel, vistiendo camiseta veraniega y shorts.",
                             "18-year-old Colombian young woman, light brown skin, honey-colored eyes, summer casual clothing, 3d style",
-                            "/static/personajes/Vanessa.png"
+                            "/static/personajes/Vanessa.png",
+                            "es-MX-DaliaNeural"      # Voz: femenina joven
                         ),
                         (
                             "Valentina",
                             "Hermana menor de Julián, de 15 años, afrocolombiana de raza negra, vistiendo uniforme escolar limpio de la escuela Gabriel García Márquez.",
                             "15-year-old Afro-Colombian schoolgirl, wearing a neat school uniform, holding notebooks, 3d style",
-                            "/static/personajes/Valentina.png"
+                            "/static/personajes/Valentina.png",
+                            "es-MX-DaliaNeural"      # Voz: femenina adolescente
                         ),
                         (
                             "Don Nelson",
                             "Vecino de 55 años, misterioso, de tez madura, parado junto a una puerta vieja de madera tallada de lujo, vistiendo camisa a cuadros, gafas y anillo de sello grande.",
                             "55-year-old mature Colombian man, wearing a plaid shirt, reading glasses, large signet ring, standing next to a luxurious weathered old wooden door, 3d style",
-                            "/static/personajes/Don_Nelson.png"
+                            "/static/personajes/Don_Nelson.png",
+                            "es-ES-AlvaroNeural"     # Voz: masculino mayor
                         )
                     ]
                     await db.executemany("""
-                        INSERT INTO personajes (nombre, descripcion_fisica, prompt_referencia, imagen_path)
-                        VALUES (?, ?, ?, ?)
+                        INSERT INTO personajes (nombre, descripcion_fisica, prompt_referencia, imagen_path, voz_edge_tts)
+                        VALUES (?, ?, ?, ?, ?)
                     """, personajes_semilla)
 
             await db.commit()
@@ -371,6 +387,17 @@ class MemoriaDB:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM personajes WHERE nombre = ?", (nombre,))
             await db.commit()
+
+    async def actualizar_voz_personaje(self, nombre: str, voz_edge_tts: str):
+        """Actualizar la voz edge-tts asignada a un personaje"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE personajes SET voz_edge_tts = ? WHERE nombre = ?",
+                (voz_edge_tts, nombre)
+            )
+            await db.commit()
+            print(f"[DB] 🎙️ Voz de '{nombre}' actualizada a: {voz_edge_tts}")
 
 
 # Instancia global
