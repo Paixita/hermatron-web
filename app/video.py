@@ -1853,26 +1853,88 @@ Responde SOLO JSON:
 
     async def _ensamblar_video(self, proyecto_id: str, work_dir: Path,
                                audio_path: Optional[str], escenas: list, resolucion: str = "1080", bgm_path: Optional[str] = None) -> tuple:
-        """Ensamblar video con Ken Burns zoom + subtítulos sincronizados (FFmpeg nativo)"""
+        """Ensamblar video con subtítulos sincronizados (FFmpeg nativo)"""
         video_final = self.videos_dir / f"{proyecto_id}.mp4"
         proyecto = self._cargar_proyecto(proyecto_id)
 
-        # ── Recopilar recursos (imágenes o videos de Veo) ─────────────────────────────
+        # ── Recopilar recursos (imágenes o videos) — BUSCADOR ROBUSTO ─────────
         imagenes = []
         for i, escena in enumerate(escenas):
             num_escena = escena.get("numero", i + 1)
-            # Primero ver si existe un clip de video
-            rec = work_dir / f"escena_{num_escena}" / "video.mp4"
-            if not rec.exists():
-                rec = work_dir / f"escena_{num_escena}" / "imagen.jpg"
-            if not rec.exists():
-                rec = work_dir / f"escena_{num_escena}" / "imagen.png"
-            if rec.exists():
+            rec = None
+
+            # Estrategia 1: lipsync_path (si el LipSync Agent lo generó)
+            lipsync_path = escena.get("lipsync_path", "")
+            if lipsync_path and Path(lipsync_path).exists():
+                rec = Path(lipsync_path)
+                print(f"[ASSEMBLY] ✅ Escena {num_escena}: usando clip lip-sync")
+
+            # Estrategia 2: video.mp4 en carpeta escena_{num}
+            if not rec:
+                candidato = work_dir / f"escena_{num_escena}" / "video.mp4"
+                if candidato.exists():
+                    rec = candidato
+
+            # Estrategia 3: imagen.png / imagen.jpg en carpeta escena_{num}
+            if not rec:
+                for ext in ["imagen.png", "imagen.jpg"]:
+                    candidato = work_dir / f"escena_{num_escena}" / ext
+                    if candidato.exists():
+                        rec = candidato
+                        break
+
+            # Estrategia 4: por índice (escena_1, escena_2... sin cero)
+            if not rec:
+                candidato = work_dir / f"escena_{i+1}" / "video.mp4"
+                if candidato.exists():
+                    rec = candidato
+                else:
+                    for ext in ["imagen.png", "imagen.jpg"]:
+                        candidato = work_dir / f"escena_{i+1}" / ext
+                        if candidato.exists():
+                            rec = candidato
+                            break
+
+            # Estrategia 5: escaneo completo del work_dir buscando imágenes/videos
+            if not rec:
+                print(f"[ASSEMBLY] ⚠️ Escena {num_escena}: buscando en work_dir completo...")
+                for sub in sorted(work_dir.iterdir()):
+                    if sub.is_dir():
+                        for nombre in ["video.mp4", "imagen.png", "imagen.jpg"]:
+                            candidato = sub / nombre
+                            if candidato.exists() and str(candidato) not in [r for r, _ in imagenes]:
+                                rec = candidato
+                                print(f"[ASSEMBLY] 🔍 Encontrado en: {candidato}")
+                                break
+                    if rec:
+                        break
+
+            if rec and rec.exists():
                 imagenes.append((str(rec), escena.get("texto_narracion", "")))
+                print(f"[ASSEMBLY] 📁 Escena {num_escena}: {rec.name}")
+            else:
+                print(f"[ASSEMBLY] ❌ Escena {num_escena}: no se encontró ningún recurso visual")
+
+        if not imagenes:
+            # Último recurso: buscar CUALQUIER imagen/video en todo el work_dir
+            print("[ASSEMBLY] 🚨 Búsqueda de emergencia en work_dir completo...")
+            for sub in sorted(work_dir.rglob("*.png")):
+                if sub.stat().st_size > 1000:
+                    imagenes.append((str(sub), ""))
+                    print(f"[ASSEMBLY] 🆘 Recurso de emergencia: {sub}")
+            for sub in sorted(work_dir.rglob("*.jpg")):
+                if sub.stat().st_size > 1000:
+                    imagenes.append((str(sub), ""))
+            for sub in sorted(work_dir.rglob("video.mp4")):
+                if sub.stat().st_size > 1000:
+                    imagenes.insert(0, (str(sub), ""))
 
         if not imagenes:
             print("[VIDEO] Sin recursos visuales (imágenes ni videos)")
+            print(f"[VIDEO] work_dir buscado: {work_dir}")
+            print(f"[VIDEO] Contenido del work_dir: {list(work_dir.iterdir()) if work_dir.exists() else 'No existe'}")
             return None, "Sin recursos visuales (imágenes ni videos)"
+
 
         print(f"[VIDEO] Ensamblando {len(imagenes)} escenas con zoom + SRT a {resolucion}p...")
 
