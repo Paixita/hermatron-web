@@ -893,13 +893,20 @@ Responde SOLO JSON:
         style_prefix = style_agent.get_prompt_prefix(estilo_detectado["id"])
         print(f"[STYLE AGENT] {estilo_detectado['emoji']} Estilo aplicado: {estilo_detectado['nombre']} | Seed: {project_seed}")
 
-        # Obtener personajes registrados para consistencia multimodal
+        # Obtener personajes y escenografías registrados para consistencia visual
         try:
             personajes = await memoria.obtener_todos_personajes()
             print(f"[VIDEO] Cargados {len(personajes)} personajes de la DB para consistencia visual.")
         except Exception as e:
             print(f"[VIDEO] Error cargando personajes para consistencia: {e}")
             personajes = []
+
+        try:
+            escenografias = await memoria.obtener_todas_escenografias()
+            print(f"[VIDEO] Cargadas {len(escenografias)} escenografías de la DB para consistencia ambiental.")
+        except Exception as e:
+            print(f"[VIDEO] Error cargando escenografías para consistencia: {e}")
+            escenografias = []
 
         for i, escena in enumerate(escenas):
             num_escena = escena.get("numero", i+1)
@@ -913,23 +920,49 @@ Responde SOLO JSON:
             descripcion = escena.get("descripcion_visual", "")
             query = escena.get("query_pexels", "")
             
-            # El style_prefix va primero para que Pollinations lo priorice
-            query_mejorado = f"{style_prefix}, {descripcion}, {query}, highly detailed, masterpiece, 8k resolution, cinematic lighting"
+            # Buscar escenografías en la descripción o texto para inyectar consistencia ambiental
+            ambiente_prompt = ""
+            ref_imgs = []
+            desc_lower = descripcion.lower()
+            texto_lower = escena.get("texto_narracion", "").lower()
+            
+            import unicodedata
+            def normalize(text):
+                return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn').lower()
+            
+            for esc in escenografias:
+                nombre_esc = esc.get("nombre", "").lower()
+                if nombre_esc and (normalize(nombre_esc) in normalize(desc_lower) or normalize(nombre_esc) in normalize(texto_lower)):
+                    # Inyectar descripción detallada del escenario
+                    clima_esc = esc.get("clima", "despejado")
+                    hora_esc = esc.get("hora_dia", "dia")
+                    suelo_esc = esc.get("material_suelo", "asfalto")
+                    desc_esc = esc.get("descripcion", "")
+                    
+                    ambiente_prompt = f"scenery backdrop is {desc_esc}, weather: {clima_esc}, time: {hora_esc}, ground: {suelo_esc}"
+                    print(f"[AMBIENTE] 🏞️ Consistencia: Inyectando escenografía '{esc['nombre']}'")
+                    
+                    img_esc_ref = esc.get("imagen_path")
+                    if img_esc_ref:
+                        local_esc_ref = img_esc_ref.lstrip('/')
+                        if os.path.exists(local_esc_ref):
+                            ref_imgs.append(local_esc_ref)
+                            print(f"[AMBIENTE] 🖼️ Consistencia: Usando imagen de referencia de escenario '{esc['nombre']}'")
+                    break
+
+            # Mezclar la escenografía en el prompt
+            if ambiente_prompt:
+                query_mejorado = f"{style_prefix}, {ambiente_prompt}, {descripcion}, {query}, highly detailed, masterpiece, 8k resolution, cinematic lighting"
+            else:
+                query_mejorado = f"{style_prefix}, {descripcion}, {query}, highly detailed, masterpiece, 8k resolution, cinematic lighting"
             
             width, height = self._get_resolucion_from_tema(proyecto.tema if proyecto else "")
             
             exito_imagen = False
             
             # Buscar personajes en la descripción o texto de la escena para consistencia
-            ref_imgs = []
-            desc_lower = descripcion.lower()
-            texto_lower = escena.get("texto_narracion", "").lower()
             for p in personajes:
                 nombre_p = p.get("nombre", "").lower()
-                import unicodedata
-                def normalize(text):
-                    return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn').lower()
-                
                 if nombre_p and (normalize(nombre_p) in normalize(desc_lower) or normalize(nombre_p) in normalize(texto_lower)):
                     img_ref = p.get("imagen_path")
                     if img_ref:

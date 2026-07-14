@@ -57,6 +57,20 @@ class MemoriaDB:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # Tabla de escenografías (entornos y fondos)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS escenografias (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT UNIQUE NOT NULL,
+                    descripcion TEXT NOT NULL,
+                    clima TEXT DEFAULT 'despejado',
+                    hora_dia TEXT DEFAULT 'dia',
+                    material_suelo TEXT DEFAULT 'asfalto',
+                    imagen_path TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             
             # Tabla de configuración
             await db.execute("""
@@ -178,6 +192,41 @@ class MemoriaDB:
                         INSERT INTO personajes (nombre, descripcion_fisica, prompt_referencia, imagen_path, voz_edge_tts)
                         VALUES (?, ?, ?, ?, ?)
                     """, personajes_semilla)
+
+            # Sembrar escenografías por defecto si la tabla está vacía
+            async with db.execute("SELECT COUNT(*) FROM escenografias") as cursor:
+                row = await cursor.fetchone()
+                if row and row[0] == 0:
+                    escenografias_semilla = [
+                        (
+                            "Esquina",
+                            "Una típica esquina de un barrio de bajos recursos, con un poste de luz de energía que tiene cables enredados, una lámpara de sodio con iluminación cálida de color naranja y paredes de ladrillo expuesto.",
+                            "nublado",
+                            "noche",
+                            "pavimento",
+                            "/static/escenografias/esquina.png"
+                        ),
+                        (
+                            "La Tienda",
+                            "Una tradicional tienda de barrio, con vitrinas de madera llenas de productos de consumo local, estanterías con latas y arroz, y una vieja nevera de Coca-Cola en la esquina.",
+                            "despejado",
+                            "dia",
+                            "baldosas",
+                            "/static/escenografias/tienda.png"
+                        ),
+                        (
+                            "Taller de Carlos",
+                            "Un pequeño taller doméstico improvisado en un garaje abierto. Hay herramientas de refrigeración, cables, pinzas y repuestos de neveras en estantes rústicos de madera.",
+                            "despejado",
+                            "dia",
+                            "cemento",
+                            "/static/escenografias/taller.png"
+                        )
+                    ]
+                    await db.executemany("""
+                        INSERT INTO escenografias (nombre, descripcion, clima, hora_dia, material_suelo, imagen_path)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, escenografias_semilla)
 
             await db.commit()
         self._initialized = True
@@ -398,6 +447,45 @@ class MemoriaDB:
             )
             await db.commit()
             print(f"[DB] 🎙️ Voz de '{nombre}' actualizada a: {voz_edge_tts}")
+
+    async def guardar_escenografia(self, nombre: str, descripcion: str, clima: str = "despejado", hora_dia: str = "dia", material_suelo: str = "asfalto", imagen_path: str = None):
+        """Guardar o actualizar una escenografía/entorno de fondo"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT OR REPLACE INTO escenografias (nombre, descripcion, clima, hora_dia, material_suelo, imagen_path)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (nombre, descripcion, clima, hora_dia, material_suelo, imagen_path))
+            await db.commit()
+            print(f"[DB] 🏞️ Escenografía '{nombre}' guardada/actualizada")
+
+    async def obtener_escenografia(self, nombre: str) -> Optional[dict]:
+        """Obtener una escenografía por su nombre"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM escenografias WHERE nombre = ?", (nombre,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
+    async def obtener_todas_escenografias(self) -> list[dict]:
+        """Obtener todas las escenografías de la base de datos"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM escenografias ORDER BY nombre ASC") as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def eliminar_escenografia(self, nombre: str):
+        """Eliminar una escenografía"""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM escenografias WHERE nombre = ?", (nombre,))
+            await db.commit()
+            print(f"[DB] 🗑️ Escenografía '{nombre}' eliminada")
 
 
 # Instancia global

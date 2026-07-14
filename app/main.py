@@ -546,6 +546,17 @@ async def video_studio(request: Request, current_user: dict = Depends(auth.get_c
         context={"request": request, "title": "HERMATRON - Estudio de Video", "user": current_user}
     )
 
+@app.get("/escenografias")
+async def escenografias_page(request: Request, current_user: dict = Depends(auth.get_current_user())):
+    if not current_user:
+        return RedirectResponse(url="/login")
+        
+    return templates.TemplateResponse(
+        request=request, 
+        name="escenografias.html", 
+        context={"request": request, "title": "HERMATRON - Diseño de Escenarios", "user": current_user}
+    )
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
     # Groq es el proveedor principal. OpenRouter entra como respaldo si Groq falla.
@@ -1041,6 +1052,56 @@ async def api_listar_voces():
         {"id": "es-AR-TomasNeural",   "nombre": "Tomás (Argentina ♂️)",      "genero": "masculino", "pais": "Argentina"},
     ]
     return {"voces": voces}
+
+# ── Endpoints de Escenografías (CRUD + Gestión visual) ───────────────────────
+
+@app.get("/api/escenografias")
+async def api_obtener_todas_escenografias():
+    escenografias = await memoria.obtener_todas_escenografias()
+    return {"escenografias": escenografias}
+
+@app.post("/api/escenografias")
+async def api_guardar_escenografia(
+    nombre: str = Form(...),
+    descripcion: str = Form(...),
+    clima: str = Form("despejado"),
+    hora_dia: str = Form("dia"),
+    material_suelo: str = Form("asfalto"),
+    imagen: Optional[UploadFile] = File(None)
+):
+    imagen_path = None
+    if imagen and imagen.filename:
+        ext = Path(imagen.filename).suffix
+        safe_name = "".join(c for c in nombre if c.isalnum() or c in ("-", "_")).rstrip()
+        filename = f"{safe_name}{ext}"
+        save_path = Path("static/escenografias") / filename
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(save_path, "wb") as buffer:
+            shutil.copyfileobj(imagen.file, buffer)
+        imagen_path = f"/static/escenografias/{filename}"
+    else:
+        # Si ya existe, mantener la ruta de la imagen existente
+        existente = await memoria.obtener_escenografia(nombre)
+        if existente:
+            imagen_path = existente.get("imagen_path")
+            
+    await memoria.guardar_escenografia(nombre, descripcion, clima, hora_dia, material_suelo, imagen_path)
+    return {"status": "success", "message": f"Escenografía '{nombre}' guardada correctamente"}
+
+@app.delete("/api/escenografias/{nombre}")
+async def api_eliminar_escenografia(nombre: str):
+    existente = await memoria.obtener_escenografia(nombre)
+    if existente and existente.get("imagen_path"):
+        # No eliminar las imágenes por defecto sembradas
+        if "static/escenografias" in existente.get("imagen_path") and not any(p in existente.get("imagen_path") for p in ["esquina.png", "tienda.png", "taller.png"]):
+            img_path = Path(existente.get("imagen_path").lstrip("/"))
+            if img_path.exists():
+                try:
+                    img_path.unlink()
+                except:
+                    pass
+    await memoria.eliminar_escenografia(nombre)
+    return {"status": "success", "message": f"Escenografía '{nombre}' eliminada correctamente"}
 
 @app.get("/api/video/proyectos")
 async def listar_videos(): 

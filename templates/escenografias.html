@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HERMATRON - Diseño de Escenarios</title>
+    <link rel="stylesheet" href="/static/styles.css?v=5">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --fondo-gradiente: linear-gradient(135deg, #0f0c1b 0%, #17112a 50%, #090613 100%);
+            --acento-glow: rgba(124, 77, 255, 0.15);
+        }
+        body.escenarios-mode {
+            background: var(--fondo-gradiente);
+            color: var(--texto);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            overflow-x: hidden;
+        }
+        .escenarios-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        /* Top Bar */
+        .escenarios-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 24px;
+            background: rgba(15, 10, 30, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--borde);
+            height: 60px;
+            box-sizing: border-box;
+        }
+        .escenarios-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: white;
+        }
+        .logo-h {
+            background: var(--acento);
+            color: white;
+            font-weight: 800;
+            font-size: 1.3rem;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            box-shadow: 0 0 15px var(--acento);
+        }
+        .logo-text h1 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+        .logo-text span {
+            font-size: 0.65rem;
+            color: var(--texto-secundario);
+            display: block;
+        }
+        .escenarios-actions-top {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Layout */
+        .escenarios-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        /* Form Sidebar */
+        .escenarios-sidebar {
+            width: 360px;
+            background: rgba(15, 12, 28, 0.75);
+            border-right: 1px solid var(--borde);
+            padding: 20px;
+            overflow-y: auto;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .escenarios-sidebar h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .form-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--texto-secundario);
+        }
+        .input-form, .select-form, .textarea-form {
+            background: var(--fondo-terciario);
+            border: 1px solid var(--borde);
+            color: var(--texto);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .input-form:focus, .select-form:focus, .textarea-form:focus {
+            border-color: var(--acento);
+            box-shadow: 0 0 10px rgba(124, 77, 255, 0.2);
+        }
+        .textarea-form {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        /* Main Gallery Content */
+        .escenarios-main {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            box-sizing: border-box;
+            background: radial-gradient(circle at top right, var(--acento-glow), transparent 60%);
+        }
+        .main-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .main-header h2 {
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: white;
+        }
+        .grid-escenarios {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        /* Scenography Card */
+        .card-escenario {
+            background: rgba(25, 20, 42, 0.45);
+            border: 1px solid var(--borde);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+        .card-escenario:hover {
+            transform: translateY(-4px);
+            border-color: var(--acento);
+            box-shadow: 0 8px 24px rgba(124, 77, 255, 0.15);
+        }
+        .card-img-wrap {
+            position: relative;
+            height: 160px;
+            background: #0b0716;
+            overflow: hidden;
+        }
+        .card-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s;
+        }
+        .card-escenario:hover .card-img {
+            transform: scale(1.05);
+        }
+        .card-labels {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .badge-tag {
+            background: rgba(0, 0, 0, 0.7);
+            color: #eee;
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .card-body {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 8px;
+        }
+        .card-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: white;
+        }
+        .card-desc {
+            margin: 0;
+            font-size: 0.78rem;
+            color: var(--texto-secundario);
+            line-height: 1.4;
+            flex: 1;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .card-footer {
+            display: flex;
+            justify-content: flex-end;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 10px;
+            margin-top: auto;
+        }
+
+        /* AI Generator Sub-panel */
+        .ai-generator-panel {
+            background: rgba(124, 77, 255, 0.05);
+            border: 1px dashed rgba(124, 77, 255, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .ai-generator-panel span {
+            font-size: 0.75rem;
+            color: var(--texto-secundario);
+        }
+        .preview-gen-image {
+            width: 100%;
+            height: 130px;
+            border-radius: 6px;
+            object-fit: cover;
+            border: 1px solid var(--borde);
+            display: none;
+        }
+        .btn-gen-ai {
+            background: var(--acento);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-gen-ai:hover {
+            opacity: 0.9;
+        }
+        
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1e1b29;
+            border: 1px solid var(--borde);
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 0.85rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="escenarios-mode">
+    <div class="escenarios-wrapper">
+        <!-- Top Bar -->
+        <nav class="escenarios-topbar">
+            <a href="/" class="escenarios-logo" title="Volver al Inicio">
+                <span class="logo-h">H</span>
+                <div class="logo-text">
+                    <h1>HERMATRON</h1>
+                    <span>Panel de Escenografías</span>
+                </div>
+            </a>
+            
+            <div class="escenarios-actions-top">
+                <a href="/videos" class="btn btn-secondary btn-sm" style="display:flex; align-items:center; gap:6px;">🎬 Video Studio</a>
+                <a href="/" class="btn btn-nav btn-sm" style="display:flex; align-items:center; gap:6px;">💬 Chat</a>
+            </div>
+        </nav>
+
+        <div class="escenarios-layout">
+            <!-- Sidebar: Registrar nuevo escenario -->
+            <aside class="escenarios-sidebar">
+                <div>
+                    <h3>🏞️ Registrar Escenario</h3>
+                    <p style="font-size:0.75rem; color:var(--texto-secundario); margin:0 0 15px 0;">Define la escenografía que los personajes usarán en la historia.</p>
+                </div>
+
+                <form id="formEscenario" onsubmit="guardarEscenografia(event)" style="display:flex; flex-direction:column; gap:12px;">
+                    <div class="form-group">
+                        <label for="scName">📋 Nombre de Escenografía</label>
+                        <input type="text" id="scName" required placeholder="Ej: Esquina del barrio, La Tienda" class="input-form">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scDesc">🔥 Descripción detallada para la IA</label>
+                        <textarea id="scDesc" required placeholder="Describe las paredes, luz, ambiente, clima..." class="textarea-form"></textarea>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group">
+                            <label for="scClima">🌦️ Clima</label>
+                            <select id="scClima" class="select-form">
+                                <option value="despejado" selected>Despejado</option>
+                                <option value="lluvioso">Lluvioso</option>
+                                <option value="nublado">Nublado</option>
+                                <option value="neblina">Neblina</option>
+                                <option value="soleado">Soleado</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="scHora">⏰ Hora</label>
+                            <select id="scHora" class="select-form">
+                                <option value="dia" selected>Día</option>
+                                <option value="noche">Noche</option>
+                                <option value="atardecer">Atardecer</option>
+                                <option value="amanecer">Amanecer</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scSuelo">🪨 Suelo</label>
+                        <select id="scSuelo" class="select-form">
+                            <option value="asfalto" selected>Asfalto/Pavimento</option>
+                            <option value="empedrado">Empedrado</option>
+                            <option value="tierra">Tierra</option>
+                            <option value="cemento">Cemento</option>
+                            <option value="baldosas">Baldosas</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>📸 Imagen de Referencia</label>
+                        <input type="file" id="scImage" accept="image/*" class="input-form" style="font-size:0.75rem;">
+                    </div>
+
+                    <!-- Botón Generar con IA opcional -->
+                    <div class="ai-generator-panel">
+                        <span>💡 ¿No tienes imagen? Genérala con IA gratis:</span>
+                        <img id="previewGenImg" class="preview-gen-image" src="" alt="Fondo generado">
+                        <button type="button" class="btn-gen-ai" id="btnGenFondo" onclick="preGenerarFondoIA()">🎨 Pre-generar con IA</button>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top:10px; padding:12px; font-weight:700;">💾 Guardar Escenario</button>
+                </form>
+            </aside>
+
+            <!-- Main Panel: Lista de escenarios -->
+            <main class="escenarios-main">
+                <div class="main-header">
+                    <h2>🏞️ Biblioteca de Escenarios</h2>
+                </div>
+
+                <div id="gridEscenarios" class="grid-escenarios">
+                    <!-- Inyección dinámica de escenarios -->
+                    <div class="spinner" style="grid-column: 1/-1; margin: 40px auto;"></div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/escenografias.js?v=5"></script>
+</body>
+</html>
