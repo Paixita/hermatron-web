@@ -920,7 +920,7 @@ Responde SOLO JSON:
             descripcion = escena.get("descripcion_visual", "")
             query = escena.get("query_pexels", "")
             
-            # Buscar escenografías en la descripción o texto para inyectar consistencia ambiental
+            # Buscar escenografías (priorizando selección manual)
             ambiente_prompt = ""
             ref_imgs = []
             desc_lower = descripcion.lower()
@@ -930,25 +930,39 @@ Responde SOLO JSON:
             def normalize(text):
                 return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn').lower()
             
-            for esc in escenografias:
-                nombre_esc = esc.get("nombre", "").lower()
-                if nombre_esc and (normalize(nombre_esc) in normalize(desc_lower) or normalize(nombre_esc) in normalize(texto_lower)):
-                    # Inyectar descripción detallada del escenario
-                    clima_esc = esc.get("clima", "despejado")
-                    hora_esc = esc.get("hora_dia", "dia")
-                    suelo_esc = esc.get("material_suelo", "asfalto")
-                    desc_esc = esc.get("descripcion", "")
-                    
-                    ambiente_prompt = f"scenery backdrop is {desc_esc}, weather: {clima_esc}, time: {hora_esc}, ground: {suelo_esc}"
-                    print(f"[AMBIENTE] 🏞️ Consistencia: Inyectando escenografía '{esc['nombre']}'")
-                    
-                    img_esc_ref = esc.get("imagen_path")
-                    if img_esc_ref:
-                        local_esc_ref = img_esc_ref.lstrip('/')
-                        if os.path.exists(local_esc_ref):
-                            ref_imgs.append(local_esc_ref)
-                            print(f"[AMBIENTE] 🖼️ Consistencia: Usando imagen de referencia de escenario '{esc['nombre']}'")
-                    break
+            manual_esc_nombre = escena.get("escenografia_ref")
+            esc_seleccionada = None
+            
+            if manual_esc_nombre:
+                # Buscar por nombre exacto en la lista de escenografías de la BD
+                for esc in escenografias:
+                    if esc.get("nombre") == manual_esc_nombre:
+                        esc_seleccionada = esc
+                        break
+            
+            # Si no hay selección manual, buscar por palabras clave en el texto
+            if not esc_seleccionada:
+                for esc in escenografias:
+                    nombre_esc = esc.get("nombre", "").lower()
+                    if nombre_esc and (normalize(nombre_esc) in normalize(desc_lower) or normalize(nombre_esc) in normalize(texto_lower)):
+                        esc_seleccionada = esc
+                        break
+                        
+            if esc_seleccionada:
+                clima_esc = esc_seleccionada.get("clima", "despejado")
+                hora_esc = esc_seleccionada.get("hora_dia", "dia")
+                suelo_esc = esc_seleccionada.get("material_suelo", "asfalto")
+                desc_esc = esc_seleccionada.get("descripcion", "")
+                
+                ambiente_prompt = f"scenery backdrop is {desc_esc}, weather: {clima_esc}, time: {hora_esc}, ground: {suelo_esc}"
+                print(f"[AMBIENTE] 🏞️ Consistencia: Aplicando escenografía '{esc_seleccionada['nombre']}'")
+                
+                img_esc_ref = esc_seleccionada.get("imagen_path")
+                if img_esc_ref:
+                    local_esc_ref = img_esc_ref.lstrip('/')
+                    if os.path.exists(local_esc_ref):
+                        ref_imgs.append(local_esc_ref)
+                        print(f"[AMBIENTE] 🖼️ Consistencia: Agregando imagen de referencia del escenario '{esc_seleccionada['nombre']}'")
 
             # Mezclar la escenografía en el prompt
             if ambiente_prompt:
@@ -960,15 +974,40 @@ Responde SOLO JSON:
             
             exito_imagen = False
             
-            # Buscar personajes en la descripción o texto de la escena para consistencia
-            for p in personajes:
-                nombre_p = p.get("nombre", "").lower()
-                if nombre_p and (normalize(nombre_p) in normalize(desc_lower) or normalize(nombre_p) in normalize(texto_lower)):
-                    img_ref = p.get("imagen_path")
-                    if img_ref:
-                        local_img_ref = img_ref.lstrip('/')
-                        if os.path.exists(local_img_ref):
-                            ref_imgs.append(local_img_ref)
+            # Buscar personajes (priorizando selección manual)
+            manual_char_nombre = escena.get("personaje_ref")
+            char_seleccionado = None
+            
+            if manual_char_nombre:
+                for p in personajes:
+                    if p.get("nombre") == manual_char_nombre:
+                        char_seleccionado = p
+                        break
+            
+            # Si hay personaje seleccionado o encontrado, inyectar consistencia física
+            if char_seleccionado:
+                print(f"[POLLINATIONS/GEMINI] 👥 Consistencia Manual: Inyectando prompt físico de {char_seleccionado['nombre']}")
+                desc_fisica_en = char_seleccionado.get("prompt_referencia", "")
+                if desc_fisica_en:
+                    query_mejorado = f"{desc_fisica_en}, {query_mejorado}"
+                img_ref = char_seleccionado.get("imagen_path")
+                if img_ref:
+                    local_img_ref = img_ref.lstrip('/')
+                    if os.path.exists(local_img_ref):
+                        ref_imgs.append(local_img_ref)
+            else:
+                # Fallback al escaneo automático por texto
+                for p in personajes:
+                    nombre_p = p.get("nombre", "").lower()
+                    if nombre_p and (normalize(nombre_p) in normalize(desc_lower) or normalize(nombre_p) in normalize(texto_lower)):
+                        desc_fisica_en = p.get("prompt_referencia", "")
+                        if desc_fisica_en:
+                            query_mejorado = f"{desc_fisica_en}, {query_mejorado}"
+                        img_ref = p.get("imagen_path")
+                        if img_ref:
+                            local_img_ref = img_ref.lstrip('/')
+                            if os.path.exists(local_img_ref):
+                                ref_imgs.append(local_img_ref)
 
             # Intentar generar imagen base con Gemini
             if GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:

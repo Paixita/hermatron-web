@@ -1326,6 +1326,65 @@ async def seleccionar_imagen_endpoint(req: SeleccionarImagenRequest, background_
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class AsignarReferenciasRequest(BaseModel):
+    proyecto_id: str
+    escena_num: int
+    personaje_ref: Optional[str] = None
+    escenografia_ref: Optional[str] = None
+
+@app.post("/api/video/asignar-referencias")
+async def api_asignar_referencias(req: AsignarReferenciasRequest):
+    try:
+        proj_obj = generador_video._cargar_proyecto(req.proyecto_id)
+        if not proj_obj:
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+            
+        for e in proj_obj.escenas_disenadas:
+            if e["numero"] == req.escena_num:
+                e["personaje_ref"] = req.personaje_ref
+                e["escenografia_ref"] = req.escenografia_ref
+                break
+                
+        generador_video._guardar_proyecto(proj_obj)
+        return {"success": True, "message": "Referencias asignadas correctamente"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/video/subir-imagen-escena")
+async def api_subir_imagen_escena(
+    proyecto_id: str = Form(...),
+    escena_num: int = Form(...),
+    imagen: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None
+):
+    try:
+        proj_obj = generador_video._cargar_proyecto(proyecto_id)
+        if not proj_obj:
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+            
+        dest_dir = generador_video._get_proyecto_dir(proyecto_id) / f"escena_{escena_num}"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / "imagen.png"
+        
+        with open(dest_path, "wb") as buffer:
+            shutil.copyfileobj(imagen.file, buffer)
+            
+        # Actualizar en el modelo del proyecto
+        for e in proj_obj.escenas_disenadas:
+            if e["numero"] == escena_num:
+                e["imagen_path"] = str(dest_path)
+                break
+                
+        generador_video._guardar_proyecto(proj_obj)
+        
+        # Disparar re-ensamblado automático en background para reflejar la imagen subida en el video final
+        if background_tasks:
+            background_tasks.add_task(ensamblar_video_task, proyecto_id)
+            
+        return {"success": True, "imagen_path": f"/video_files/{proyecto_id}/escena_{escena_num}/imagen.png"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/video/subir-musica")
 async def api_subir_musica(archivo: UploadFile = File(...)):
     ext = Path(archivo.filename).suffix

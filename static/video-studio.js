@@ -295,6 +295,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
         cargarPersonajes();
     } catch (e) { console.error("Error cargando personajes al iniciar:", e); }
+
+    try {
+        cargarEscenografias();
+    } catch (e) { console.error("Error cargando escenografías al iniciar:", e); }
 });
 
 function actualizarRatioPreview() {
@@ -879,11 +883,22 @@ async function renderStoryboard(proyectoId) {
             const imgUrl = relPath ? '/video_files' + relPath : '';
             
             // Generar opciones del select de personajes de referencia
-            let charOptions = `<option value="ia" selected>🔮 Generar con IA (Default)</option>`;
+            const selectedCharName = escena.personaje_ref || '';
+            let charOptions = `<option value="" ${!selectedCharName ? 'selected' : ''}>🔮 Auto-detectar Personaje (Default)</option>`;
             if (window.personajes && window.personajes.length > 0) {
                 window.personajes.forEach(p => {
-                    const isSelected = escena.imagen_path && (escena.imagen_path.includes(p.nombre) || escena.imagen_path === p.imagen_path);
-                    charOptions += `<option value="${p.imagen_path}" ${isSelected ? 'selected' : ''}>👤 Usar Foto de ${p.nombre}</option>`;
+                    const isSelected = selectedCharName === p.nombre;
+                    charOptions += `<option value="${p.nombre}" ${isSelected ? 'selected' : ''}>👤 ${p.nombre}</option>`;
+                });
+            }
+
+            // Generar opciones del select de escenografías de referencia
+            const selectedEscName = escena.escenografia_ref || '';
+            let escOptions = `<option value="" ${!selectedEscName ? 'selected' : ''}>🌍 Auto-detectar Fondo (Default)</option>`;
+            if (window.escenografias && window.escenografias.length > 0) {
+                window.escenografias.forEach(esc => {
+                    const isEscSelected = selectedEscName === esc.nombre;
+                    escOptions += `<option value="${esc.nombre}" ${isEscSelected ? 'selected' : ''}>🏞️ ${esc.nombre}</option>`;
                 });
             }
 
@@ -896,14 +911,14 @@ async function renderStoryboard(proyectoId) {
                 <div class="sc-image-wrap" style="aspect-ratio: ${ratio.replace(':', '/')};">
                     <img id="img-escena-${escena.numero}" src="${imgUrl}" 
                          onclick="window.open('${imgUrl}', '_blank')"
-                         onerror="this.src='https://via.placeholder.com/400x700?text=Error+al+cargar+imagen'"
+                         onerror="this.src='https://via.placeholder.com/400x700?text=Cargar+imagen+de+escena'"
                          loading="lazy">
-                    <button class="btn-regenerar-mini" title="Regenerar esta imagen" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">
+                    <button class="btn-regenerar-mini" title="Regenerar esta imagen con IA" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">
                         🔄
                     </button>
                     <div id="overlay-escena-${escena.numero}" class="sc-overlay">
                         <div class="spinner-small"></div>
-                        <span>Generando...</span>
+                        <span>Procesando...</span>
                     </div>
                     <div class="sc-caption-preview">${escena.texto_narracion || ''}</div>
                 </div>
@@ -913,11 +928,25 @@ async function renderStoryboard(proyectoId) {
                         <label>AI Art Prompt</label>
                         <textarea id="prompt-escena-${escena.numero}">${escena.descripcion_visual || ''}</textarea>
                     </div>
-                    <div class="sc-character-select" style="margin-top: 10px;">
-                        <label style="font-size: 0.75rem; color: var(--texto-secundario); font-weight: 600; display: block; margin-bottom: 4px;">🖼️ Visual de Referencia:</label>
-                        <select class="select-sm" style="width: 100%; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 4px; border-radius: 4px; font-size: 0.8rem;" onchange="seleccionarPersonajeReferencia('${proyectoId}', ${escena.numero}, this.value)">
-                            ${charOptions}
-                        </select>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+                        <div class="sc-character-select">
+                            <label style="font-size: 0.7rem; color: var(--texto-secundario); font-weight: 600; display: block; margin-bottom: 2px;">👤 Personaje:</label>
+                            <select id="char-select-${escena.numero}" class="select-sm" style="width: 100%; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 4px; border-radius: 4px; font-size: 0.75rem;" onchange="actualizarReferenciasEscena('${proyectoId}', ${escena.numero})">
+                                ${charOptions}
+                            </select>
+                        </div>
+                        <div class="sc-scene-select">
+                            <label style="font-size: 0.7rem; color: var(--texto-secundario); font-weight: 600; display: block; margin-bottom: 2px;">🏞️ Escenario:</label>
+                            <select id="esc-select-${escena.numero}" class="select-sm" style="width: 100%; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 4px; border-radius: 4px; font-size: 0.75rem;" onchange="actualizarReferenciasEscena('${proyectoId}', ${escena.numero})">
+                                ${escOptions}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 10px; border-top: 1px dashed var(--borde); padding-top: 8px;">
+                        <label style="font-size: 0.7rem; color: var(--texto-secundario); font-weight: 600; display: block; margin-bottom: 4px;">📁 Cargar Imagen Propia:</label>
+                        <input type="file" accept="image/*" style="font-size: 0.75rem; width: 100%; color: var(--texto-secundario);" onchange="subirImagenPropiaEscena('${proyectoId}', ${escena.numero}, this.files[0])">
                     </div>
                 </div>
                 <div id="alternativas-${escena.numero}" class="sc-alternativas"></div>
@@ -1153,6 +1182,18 @@ async function cargarPersonajes() {
     }
 }
 
+window.escenografias = [];
+
+async function cargarEscenografias() {
+    try {
+        const response = await fetch('/api/escenografias');
+        const data = await response.json();
+        window.escenografias = data.escenografias || [];
+    } catch (error) {
+        console.error("Error cargando escenografías:", error);
+    }
+}
+
 function renderCharacterList() {
     const listDiv = document.getElementById('characterList');
     if (!listDiv) return;
@@ -1331,6 +1372,63 @@ async function seleccionarPersonajeReferencia(proyectoId, escenaNum, value) {
         }
     } catch (error) {
         showToast('❌ Error de conexión', 'error');
+    } finally {
+        if (overlay) overlay.classList.remove('active');
+    }
+}
+
+// Actualizar referencias asignadas (Personaje + Escenario)
+async function actualizarReferenciasEscena(proyectoId, escenaNum) {
+    const charVal = document.getElementById(`char-select-${escenaNum}`).value;
+    const escVal = document.getElementById(`esc-select-${escenaNum}`).value;
+    
+    try {
+        const response = await fetch('/api/video/asignar-referencias', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                proyecto_id: proyectoId,
+                escena_num: escenaNum,
+                personaje_ref: charVal || null,
+                escenografia_ref: escVal || null
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            showToast('🎯 Coherencia vinculada con éxito. Las regeneraciones heredarán este diseño.', 'success');
+        }
+    } catch (error) {
+        showToast('❌ Error de conexión al guardar referencias', 'error');
+    }
+}
+
+// Carga directa de imagen propia para la toma
+async function subirImagenPropiaEscena(proyectoId, escenaNum, file) {
+    if (!file) return;
+    
+    const overlay = document.getElementById(`overlay-escena-${escenaNum}`);
+    if (overlay) overlay.classList.add('active');
+    
+    const formData = new FormData();
+    formData.append('proyecto_id', proyectoId);
+    formData.append('escena_num', escenaNum);
+    formData.append('imagen', file);
+    
+    try {
+        const response = await fetch('/api/video/subir-imagen-escena', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (data.success) {
+            showToast('📁 Imagen de escena cargada con éxito', 'success');
+            // Actualizar previsualización en el DOM
+            document.getElementById(`img-escena-${escenaNum}`).src = data.imagen_path + '?t=' + new Date().getTime();
+        } else {
+            showToast('❌ Error subiendo la imagen propia', 'error');
+        }
+    } catch (error) {
+        showToast('❌ Error de conexión al subir la imagen propia', 'error');
     } finally {
         if (overlay) overlay.classList.remove('active');
     }
