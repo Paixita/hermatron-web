@@ -20,7 +20,9 @@ class ScriptwriterAgent:
         
         system_prompt = """
 Actúa como un GUIONISTA DE CINE DE ELITE. Tu tarea es expandir la idea del usuario en una estructura narrativa dividida en escenas para un video.
-Asegura un ritmo dramático consistente.
+
+⚠️ IMPORTANTE - RESPETAR EL LIBRETO DEL USUARIO (CRÍTICO):
+Si el prompt del usuario ya viene estructurado escena por escena (por ejemplo, con "Escena 1:", "Escena 2:", "Título:", "Narración:", "Diálogo:", etc.), NO reinventes la historia y NO cambies los diálogos. Limítate a PARSEAR y ESTRUCTURAR el texto del usuario de forma literal en la estructura JSON solicitada. Respeta los títulos originales ya que indican las ubicaciones/escenografías de la filmación.
 
 🚫 REGLAS NARRATIVAS DE ORO:
 1. DURACIÓN DE ESCENAS (CRÍTICO): Cada escena dura exactamente 5 segundos. Por lo tanto, la narración (texto_narracion) de cada escena debe ser sumamente CORTA (entre 12 y 15 palabras de lectura lenta y fluida).
