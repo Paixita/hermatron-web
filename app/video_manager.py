@@ -19,7 +19,7 @@ from groq import Groq
 client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 def run_async(coro):
-    """Helper para ejecutar corrutinas en un entorno síncrono (Celery worker)."""
+    """Helper para ejecutar corrutinas en un entorno síncrono bloqueando hasta terminar."""
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -27,7 +27,9 @@ def run_async(coro):
         asyncio.set_event_loop(loop)
     
     if loop.is_running():
-        return asyncio.ensure_future(coro)
+        # Ejecutar corrutina de forma segura desde el hilo secundario al loop principal
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result()
     return loop.run_until_complete(coro)
 
 def pre_producir_video_task(payload: Dict[str, Any]):
