@@ -27,6 +27,9 @@ from app.config import (
 from google import genai
 from google.genai import types
 from app.memoria import memoria
+from app.agents.scriptwriter_agent import ScriptwriterAgent
+from app.agents.casting_agent import CastingAgent
+from app.agents.inspector_agent import InspectorAgent
 
 # ── Agentes Multi-Agente (inspirados en ViMax) ────────────────────────────────
 from app.agents.consistency_agent import consistency_agent   # Consistencia visual de personajes
@@ -74,6 +77,8 @@ class EscenaDisenada:
     query_pexels: str = ""
     aprobada: bool = False
     imagen_path: Optional[str] = None
+    personaje_ref: Optional[str] = ""
+    escenografia_ref: Optional[str] = ""
 
 
 @dataclass
@@ -397,11 +402,11 @@ Analiza este tema como director de cine profesional.
         return analisis
 
     # ================================================================
-    # FASE 3: DISEÑAR ESCENAS
+    # FASE 3: DISEÑAR ESCENAS (MESA CREATIVA MULTI-AGENTE)
     # ================================================================
     async def disenar_escenas(self, proyecto_id: str, groq_client=None) -> list:
         """
-        Fase 3: Diseñar escenas coherentes como Director de Cine
+        Fase 3: Diseñar escenas coherentes convocando al Equipo de Agentes Creativos.
         """
         self._actualizar_estado(proyecto_id, VideoEstado.DISENANDO)
         self._actualizar_progreso(proyecto_id, 40)
@@ -411,94 +416,27 @@ Analiza este tema como director de cine profesional.
             raise ValueError(f"Proyecto {proyecto_id} no encontrado")
 
         analisis = proyecto.analisis or {}
-        tono = analisis.get("tono_general", "documental")
         estilo = analisis.get("estilo_visual", "cinematográfico")
-        atmosfera = analisis.get("atmosfera", "profesional")
 
-        # Cargar personajes de la base de datos para inyectar su consistencia en el prompt del sistema
-        personajes = await memoria.obtener_todos_personajes()
-        personajes_info = ""
-        if personajes:
-            personajes_info = "\nFICHA DE PERSONAJES REGISTRADOS (OBLIGATORIO RESPETAR SUS ETNIAS Y RASGOS EN CADA ESCENA):\n"
-            for p in personajes:
-                personajes_info += f"- {p['nombre']}: {p['descripcion_fisica']} (Prompt de referencia en inglés: {p['prompt_referencia']})\n"
-
-        # Generar guión + escenas diseñadas
-        system_prompt = f"""
-Actúa como un DIRECTOR DE CINE e INGENIEIRO DE PROMPTS DE ÉLITE (Arquitecto Visual).
-Tu objetivo es transformar la idea del usuario en un video largo de ultra-alta fidelidad con una narrativa envolvente.
-{personajes_info}
-🛠 ESTRUCTURA DE PENSAMIENTO (Arquitecto Visual)
-Cada escena debe seguir este orden lógico para las descripciones visuales:
-1. Núcleo de la Escena (Sujeto): Define quién o qué es el protagonista con adjetivos específicos.
-2. Estilo y Medio: Define si es "Cinemática de Hollywood", "Animación 3D estilo Pixar", "Anime de alta gama (Studio Ghibli style)", o "Fotografía Realista".
-3. Composición y Cámara: Tipo de plano (Primer plano, Plano americano, Gran angular) y ángulo (Cenital, Nadir, Nivel de ojos).
-4. Atmósfera e Iluminación: Define la luz (Luz volumétrica, Golden hour, Neones cyberpunk) y el sentimiento (Melancólico, Épico, Elegante).
-5. Detalles Técnicos (Calidad): Agrega terminología de renderizado como "8K resolution, Unreal Engine 5 render, Ray tracing, highly detailed textures, masterwork".
-
-🎨 CONFIGURACIONES SEGÚN EL ESTILO:
-- Si es Película (Live Action): "Cinematic shot, hyper-realistic, [Sujeto], dressed in elegant attire, dramatic rim lighting, shot on 35mm lens, depth of field, anamorphic bokeh, 8k."
-- Si es Animación 3D: "High-end 3D animation, stylized [Sujeto], vibrant colors, subsurface scattering on skin, Disney/Pixar aesthetic, 4k render."
-- Si es Anime: "Professional Anime illustration, [Sujeto], sharp lines, cel-shaded, cinematic background art, Makoto Shinkai style, high contrast, 4k."
-
-🚫 REGLAS DE ORO (Evitar Descoordinación):
-- FICHA DE PERSONAJES OBLIGATORIA (CONSISTENCIA DE RAZA Y ASPECTO):
-  * Julián (Protagonista): Siempre debe ser de raza negra (Afrocolombiano/black), cabello negro corto y muy rizado. De niño (8 años): mirada inocente, ropa sencilla de barrio. De adulto (15 años): joven de raza negra.
-  * Hamilton: Joven mestizo/trigueño (mayor que Julián), elegante, con cabello castaño o negro corto, ojos claros muy distintivos (verdes o avellana).
-  * El Zarco: Joven colombiano trigueño o mulato, ojos claros muy intensos (azules o verdes), aspecto urbano y mirada desafiante.
-  * Carlos (papá), Rosalba (mamá), Vanessa y Valentina (hermanas): Todos son de raza negra (Afrocolombianos/black).
-- CERO AMBIGÜEDAD: Define sujetos específicos en cada escena (ej: "8-year-old Afro-Colombian black boy Julian, short curly hair...").
-- ACCIÓN Y MOVIMIENTO EN EL PROMPT: El prompt visual debe describir una acción o movimiento real en progreso (ej: "Julian is speaking and moving his hands", "Julian is walking along the street"). No describas escenas estáticas.
-- CONSISTENCIA DE PERSONAJE: Describe rasgos físicos inalterables para que no cambien entre escenas.
-- IDIOMA: Los campos técnicos (descripcion_visual) deben estar en INGLÉS para máxima compatibilidad con modelos de difusión.
-- PROHIBIDO EL ABSTRACTISMO: Muestra situaciones REALES y LITERALES.
-- DURACIÓN Y LONGITUD (CRÍTICO - REGLA DE 5 SEGUNDOS): Cada escena se convertirá en un clip de 5 segundos (por compatibilidad con Mochi 1). Por lo tanto, el 'texto_narracion' de cada escena debe ser CORTA (entre 12 y 15 palabras de lectura fluida), para que se pueda leer perfectamente en exactamente 5 segundos de duración.
-- FORMATO DE DIÁLOGOS DE MULTI-VOZ: Si la escena contiene un diálogo, escríbelo estrictamente en el formato: `Nombre: "Mensaje"`. Por ejemplo: `Julián: "Es muy hermoso Hamilton."` o `Hamilton: "Qué te pasa."`. Esto permitirá al sistema asignar voces distintas y realistas a cada personaje.
-- NÚMERO DE ESCENAS DINÁMICO (CRÍTICO): Si el prompt del usuario es corto o describe una sola escena (o una situación de un solo plano), genera EXACTAMENTE esa escena (1 sola escena en el JSON). No inventes escenas de relleno (filler scenes) a menos que el usuario lo solicite de forma explícita pidiendo una secuencia o capítulo de varios pasos.
-
-Responde SOLO con JSON válido, sin markdown:
-{{
-    "guion_completo": "texto completo del guión narrativo abreviado (150-200 palabras)",
-    "escenas": [
-        {{
-            "numero": 1,
-            "titulo": "Apertura impactante",
-            "texto_narracion": "Escribe aquí de 12 a 15 palabras de narración (lectura de 5 segundos)...",
-            "descripcion_visual": "[Sujeto con descripción física de raza y ropa], [Estilo y Acción/Movimiento activo en progreso], [Cámara], [Iluminación], [Calidad] (EN INGLÉS)",
-            "angulo_camara": "...",
-            "iluminacion": "...",
-            "paleta_colores": "...",
-            "movimiento": "...",
-            "emocion": "...",
-            "query_pexels": "..."
-        }}
-    ]
-}}
-"""
-        user_prompt = f"""
-TEMA: {proyecto.tema}
-DESCRIPIÓN: {proyecto.prompt}
-
-Diseña el video completo como director de cine.
-"""
+        # 👥 Instanciar el Equipo Creativo Multi-Agente
+        scriptwriter = ScriptwriterAgent()
+        caster = CastingAgent()
+        inspector = InspectorAgent()
 
         try:
-            texto = await self._call_llm(system_prompt, user_prompt, json_mode=True)
-            # Limpiar TODO tipo de markdown y texto extra
-            texto = re.sub(r'^```json\s*', '', texto)
-            texto = re.sub(r'\s*```$', '', texto)
-            texto = texto.strip()
-            # Si empieza con { o [, es JSON válido
-            if not texto.startswith('{'):
-                # Buscar el primer {
-                idx = texto.find('{')
-                if idx != -1:
-                    texto = texto[idx:]
-            data = json.loads(texto)
+            # ✍️ Paso 1: El Guionista redacta las escenas y diálogos
+            guion_inicial = await scriptwriter.generar_guion(proyecto.tema, proyecto.prompt, self._call_llm)
+            
+            # 🎙️ Paso 2: El Director de Reparto (Casting) valida el elenco y asigna voces
+            guion_con_casting = await caster.asignar_elenco_y_voces(guion_inicial, self._call_llm)
+            
+            # 🛡️ Paso 3: El Inspector de Escenas (Director de Arte) vincula los sets y refina la composición
+            guion_final = await inspector.inspeccionar_y_refinar(guion_con_casting, estilo, self._call_llm)
+            
+            data = guion_final
         except Exception as e:
-            print(f"[VIDEO] Error diseñando escenas con LLM: {e}. Usando placeholder.")
+            print(f"[VIDEO] ⚠️ Error en el flujo multi-agente: {e}. Usando fallback de pre-producción.")
             data = self._generar_escenas_placeholder(proyecto.tema)
-
         # Guardar guión y escenas
         proyecto.guion_completo = data.get("guion_completo", "")
         escenas_data = data.get("escenas", [])
@@ -516,7 +454,9 @@ Diseña el video completo como director de cine.
                 movimiento=e.get("movimiento", ""),
                 emocion=e.get("emocion", ""),
                 query_pexels=e.get("query_pexels", "cinematic dramatic"),
-                aprobada=True  # Aprobadas por defecto
+                aprobada=True,  # Aprobadas por defecto
+                personaje_ref=e.get("personaje_ref", ""),
+                escenografia_ref=e.get("escenografia_ref", "")
             )
             escenas_disenadas.append(asdict(escena))
 
