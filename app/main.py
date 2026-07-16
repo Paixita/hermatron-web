@@ -1595,6 +1595,59 @@ async def probar_voz(req: ProbarVozRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/debug/latest-project")
+async def debug_latest_project():
+    try:
+        import os
+        import json
+        from pathlib import Path
+        videos_dir = generador_video.videos_dir
+        json_files = list(videos_dir.glob("proyecto_*.json"))
+        if not json_files:
+            return {"error": "No projects found in videos_dir", "videos_dir": str(videos_dir)}
+            
+        latest_file = max(json_files, key=lambda p: p.stat().st_mtime)
+        
+        with open(latest_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        proyecto_id = data.get("id")
+        project_dir = videos_dir / proyecto_id
+        
+        dir_structure = {}
+        if project_dir.exists():
+            for p in project_dir.rglob("*"):
+                rel = p.relative_to(project_dir)
+                dir_structure[str(rel)] = {
+                    "is_file": p.is_file(),
+                    "size": p.stat().st_size if p.is_file() else 0
+                }
+        else:
+            dir_structure = "Directory does not exist"
+            
+        return {
+            "latest_project_file": latest_file.name,
+            "project_data": {
+                "id": data.get("id"),
+                "tema": data.get("tema"),
+                "estado": data.get("estado"),
+                "progreso": data.get("progreso"),
+                "error": data.get("error"),
+                "escenas_disenadas": [
+                    {
+                        "numero": e.get("numero"),
+                        "imagen_path": e.get("imagen_path"),
+                        "lipsync_path": e.get("lipsync_path")
+                    } for e in data.get("escenas_disenadas", [])
+                ]
+            },
+            "dir_structure": dir_structure,
+            "videos_dir_exists": videos_dir.exists(),
+            "videos_dir_contents": [p.name for p in videos_dir.iterdir() if p.name.startswith("proyecto_")]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host=HOST, port=PORT, reload=DEBUG)
