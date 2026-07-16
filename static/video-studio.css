@@ -1,7 +1,9 @@
 /* PANEL DE STORYBOARD VERTICAL PROFESIONAL (ESTILO CAPCUT/ADOBE) */
 .studio-main {
+    height: calc(100vh - 60px) !important;
     max-height: calc(100vh - 60px) !important;
     overflow-y: auto !important;
+    display: block !important;
 }
 
 .studio-content-layout {
