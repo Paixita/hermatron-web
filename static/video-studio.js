@@ -383,14 +383,24 @@ async function crearVideoDesdeStudio() {
                 progresoPorcentaje.textContent = pct + '%';
 
                 // Mensajes de fase estilo CapCut
-                if (progData.estado === 'generando_imagenes' || pct < 80) {
-                    progresoEstado.innerHTML = `📸 <strong>Fase 1:</strong> Creando imágenes multimedia...`;
+                if (progData.mensaje_estado) {
+                    progresoEstado.innerHTML = progData.mensaje_estado;
+                } else {
+                    if (progData.estado === 'generando_imagenes' || pct < 80) {
+                        progresoEstado.innerHTML = `📸 <strong>Fase 1:</strong> Creando imágenes multimedia...`;
+                    } else if (pct >= 80 && pct < 90) {
+                        progresoEstado.innerHTML = `🎙️ <strong>Fase 2:</strong> Creando la voz superpuesta...`;
+                    } else if (pct >= 90 && pct < 100) {
+                        progresoEstado.innerHTML = `🎞️ <strong>Fase 3:</strong> Ensamblando escenas y video...`;
+                    }
+                }
+
+                // Colores de la barra
+                if (pct < 80) {
                     progresoFill.style.background = '#6f42c1';
                 } else if (pct >= 80 && pct < 90) {
-                    progresoEstado.innerHTML = `🎙️ <strong>Fase 2:</strong> Creando la voz superpuesta...`;
                     progresoFill.style.background = '#fd7e14';
-                } else if (pct >= 90 && pct < 100) {
-                    progresoEstado.innerHTML = `🎞️ <strong>Fase 3:</strong> Ensamblando escenas y video...`;
+                } else {
                     progresoFill.style.background = '#17a2b8';
                 }
                 
@@ -1080,14 +1090,24 @@ async function ensamblarVideoFinal() {
                 progresoPorcentaje.textContent = pct + '%';
                 
                 // Mensajes de fase final CapCut Style
+                if (progData.mensaje_estado) {
+                    progresoEstado.innerHTML = progData.mensaje_estado;
+                } else {
+                    if (pct < 35) {
+                        progresoEstado.innerHTML = '🎙️ <strong>Creando la voz superpuesta...</strong>';
+                    } else if (pct < 65) {
+                        progresoEstado.innerHTML = '📝 <strong>Creando subtítulos...</strong>';
+                    } else {
+                        progresoEstado.innerHTML = '🎞️ <strong>Creando el video...</strong>';
+                    }
+                }
+
+                // Colores de la barra
                 if (pct < 35) {
-                    progresoEstado.innerHTML = '🎙️ <strong>Creando la voz superpuesta...</strong>';
                     progresoFill.style.background = '#fd7e14';
                 } else if (pct < 65) {
-                    progresoEstado.innerHTML = '📝 <strong>Creando subtítulos...</strong>';
                     progresoFill.style.background = '#17a2b8';
                 } else {
-                    progresoEstado.innerHTML = '🎞️ <strong>Creando el video...</strong>';
                     progresoFill.style.background = '#2ea043';
                 }
                 

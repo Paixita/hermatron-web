@@ -1470,6 +1470,7 @@ async def progreso_video(video_id: str):
         "video_id": video_id, 
         "progreso": progreso, 
         "estado": proyecto.get("estado", "desconocido"),
+        "mensaje_estado": proyecto.get("mensaje_estado", "Procesando..."),
         "error": proyecto.get("error")
     }
 

@@ -115,6 +115,7 @@ class VideoProyecto:
     voz: str = "es-MX-JorgeNeural"
     progreso: int = 0
     bgm_path: Optional[str] = None
+    mensaje_estado: Optional[str] = "Iniciando..."
 
 
 class GeneradorVideo:
@@ -181,28 +182,29 @@ class GeneradorVideo:
             data = json.load(f)
         return VideoProyecto(**data)
 
-    def _actualizar_estado(self, proyecto_id: str, estado: str, error: str = None):
+    def _actualizar_estado(self, proyecto_id: str, estado: str, error: str = None, mensaje: str = None):
         proyecto = self._cargar_proyecto(proyecto_id)
         if proyecto:
             proyecto.estado = estado
             if error:
                 proyecto.error = error
+            if mensaje:
+                proyecto.mensaje_estado = mensaje
             self._guardar_proyecto(proyecto)
 
-    def _actualizar_progreso(self, proyecto_id: str, progreso: int):
+    def _actualizar_progreso(self, proyecto_id: str, progreso: int, mensaje: str = None):
         progreso = max(0, min(100, progreso))
         self._progreso[proyecto_id] = progreso
-        # Persistir en el JSON para que el proceso principal (API) lo vea
         proyecto = self._cargar_proyecto(proyecto_id)
         if proyecto:
             proyecto.progreso = progreso
+            if mensaje:
+                proyecto.mensaje_estado = mensaje
             self._guardar_proyecto(proyecto)
 
     def obtener_progreso(self, proyecto_id: str) -> int:
-        # Intentar desde memoria primero (si estamos en el mismo proceso)
         if proyecto_id in self._progreso:
             return self._progreso[proyecto_id]
-        # Si no, leer del JSON
         proyecto = self._cargar_proyecto(proyecto_id)
         return proyecto.progreso if proyecto and hasattr(proyecto, 'progreso') else 0
 
@@ -408,8 +410,8 @@ Analiza este tema como director de cine profesional.
         """
         Fase 3: Diseñar escenas coherentes convocando al Equipo de Agentes Creativos.
         """
-        self._actualizar_estado(proyecto_id, VideoEstado.DISENANDO)
-        self._actualizar_progreso(proyecto_id, 40)
+        self._actualizar_estado(proyecto_id, VideoEstado.DISENANDO, mensaje="✍️ El Guionista está escribiendo las escenas...")
+        self._actualizar_progreso(proyecto_id, 25, mensaje="✍️ Redactando escenas y diálogos...")
 
         proyecto = self._cargar_proyecto(proyecto_id)
         if not proyecto:
@@ -425,12 +427,15 @@ Analiza este tema como director de cine profesional.
 
         try:
             # ✍️ Paso 1: El Guionista redacta las escenas y diálogos
+            self._actualizar_progreso(proyecto_id, 35, mensaje="🎙️ Director de Reparto analizando personajes...")
             guion_inicial = await scriptwriter.generar_guion(proyecto.tema, proyecto.prompt, self._call_llm)
             
             # 🎙️ Paso 2: El Director de Reparto (Casting) valida el elenco y asigna voces
+            self._actualizar_progreso(proyecto_id, 45, mensaje="🏞️ Vinculando escenarios con tu biblioteca de sets...")
             guion_con_casting = await caster.asignar_elenco_y_voces(guion_inicial, self._call_llm)
             
             # 🛡️ Paso 3: El Inspector de Escenas (Director de Arte) vincula los sets y refina la composición
+            self._actualizar_progreso(proyecto_id, 55, mensaje="🛡️ Inspector de Escenas refinando la composición cinematográfica...")
             guion_final = await inspector.inspeccionar_y_refinar(guion_con_casting, estilo, self._call_llm)
             
             data = guion_final
@@ -677,8 +682,8 @@ Responde SOLO JSON:
         escenas_aprobadas = proyecto.escenas_disenadas
         
         if proyecto.narracion:
-            self._actualizar_estado(proyecto_id, VideoEstado.GENERANDO_VEZ)
-            self._actualizar_progreso(proyecto_id, 85)
+            self._actualizar_estado(proyecto_id, VideoEstado.GENERANDO_VEZ, mensaje="🎙️ Generando diálogos y voces de los personajes...")
+            self._actualizar_progreso(proyecto_id, 85, mensaje="🎙️ Sintetizando voces y diálogos...")
 
             escenas_con_texto = [e.get("texto_narracion") for e in escenas_aprobadas if len(e.get("texto_narracion") or "") > 5]
             if len(proyecto.guion_completo or "") < 50 and escenas_con_texto:
@@ -700,6 +705,7 @@ Responde SOLO JSON:
         # Obtener música de fondo si existe en el proyecto
         bgm_path = proyecto.bgm_path
 
+        self._actualizar_progreso(proyecto_id, 92, mensaje="🎞️ Ensamblando clips y subtítulos con FFmpeg...")
         video_final, error_msg = await self._ensamblar_video(
             proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion, bgm_path=bgm_path
         )
@@ -707,10 +713,10 @@ Responde SOLO JSON:
         if not video_final or not Path(video_final).exists():
              error_desc = error_msg or "Error en ensamblaje de FFmpeg"
              print(f"[VIDEO] Error crítico: {error_desc}")
-             self._actualizar_estado(proyecto_id, VideoEstado.ERROR, error_desc)
+             self._actualizar_estado(proyecto_id, VideoEstado.ERROR, error_desc, mensaje="❌ Error crítico en el ensamblado")
              return ""
 
-        self._actualizar_progreso(proyecto_id, 100)
+        self._actualizar_progreso(proyecto_id, 100, mensaje="🎬 ¡Video completado con éxito!")
 
         proyecto.estado = VideoEstado.COMPLETADO
         proyecto.archivo_final = Path(video_final).name if video_final else None
@@ -850,6 +856,7 @@ Responde SOLO JSON:
 
         for i, escena in enumerate(escenas):
             num_escena = escena.get("numero", i+1)
+            self._actualizar_progreso(proyecto_id, 60 + int(i / total * 20), mensaje=f"📸 Creando imagen multimedia {num_escena} de {total}...")
             print(f"[VIDEO] Procesando visuales para escena {num_escena} de {total}...")
             escena_dir = work_dir / f"escena_{num_escena}"
             escena_dir.mkdir(exist_ok=True)
@@ -1036,7 +1043,7 @@ Responde SOLO JSON:
                     "fuente": fuente_usada
                 }, f, ensure_ascii=False, indent=2)
 
-            self._actualizar_progreso(proyecto_id, 65 + int((i + 1) / total * 15))
+            self._actualizar_progreso(proyecto_id, 60 + int((i + 1) / total * 20), mensaje=f"✅ Imagen de escena {num_escena} completada.")
             fuente_usada = "placeholder"  # Reset para siguiente escena
 
             # Pequeña pausa para no saturar las APIs
@@ -1049,6 +1056,7 @@ Responde SOLO JSON:
         # 🎤 LIP-SYNC AGENT (SadTalker / Wav2Lip — 100% GRATIS vía HuggingFace)
         # Toma cada imagen de personaje + su audio TTS y genera video con labios moviéndose
         if lipsync_agent._gradio_disponible:
+            self._actualizar_progreso(proyecto_id, 80, mensaje="🎙️ Aplicando sincronización de labios (Lip-Sync)...")
             print(f"[MULTI-AGENTE] 🎤 LipSync Agent: Procesando sincronización labial "
                   f"en {total} escenas (SadTalker / Wav2Lip gratis)...")
             try:
