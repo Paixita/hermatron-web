@@ -1209,6 +1209,55 @@ async function cargarEscenografias() {
         const response = await fetch('/api/escenografias');
         const data = await response.json();
         window.escenografias = data.escenografias || [];
+        
+        // Renderizar en la biblioteca si el grid existe
+        const grid = document.getElementById('gridEscenarios');
+        if (grid) {
+            if (window.escenografias.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 40px; background: rgba(255,255,255,0.02); border: 1px dashed var(--borde); border-radius: 12px; color: var(--texto-secundario);">
+                        <div style="font-size: 2.5rem; margin-bottom: 10px;">🏞️</div>
+                        <p style="margin: 0; font-size: 0.95rem; font-weight: 500;">No hay escenarios personalizados registrados.</p>
+                        <p style="margin: 5px 0 0 0; font-size: 0.8rem; color: rgba(255,255,255,0.3);">Usa el panel de la izquierda para registrar tu primer escenario.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = '';
+            window.escenografias.forEach(esc => {
+                const card = document.createElement('div');
+                card.className = 'card-escenario';
+                card.style.cssText = `
+                    background: #1c1c24;
+                    border: 1px solid var(--borde);
+                    border-radius: 12px;
+                    overflow: hidden;
+                    transition: transform 0.2s, border-color 0.2s;
+                `;
+
+                const photoUrl = esc.imagen_path || 'https://via.placeholder.com/300x160?text=🏞️+Sin+Imagen';
+
+                card.innerHTML = `
+                    <div class="card-img-wrap" style="position:relative; height:150px; overflow:hidden; background:#000;">
+                        <img class="card-img" src="${photoUrl}" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='https://via.placeholder.com/300x160?text=🏞️+Escenario'">
+                        <div class="card-labels" style="position:absolute; bottom:8px; left:8px; display:flex; gap:4px; flex-wrap:wrap;">
+                            <span class="badge-tag" style="background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; font-size:0.68rem; color:#fff;">🌦️ ${esc.clima.toUpperCase()}</span>
+                            <span class="badge-tag" style="background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; font-size:0.68rem; color:#fff;">⏰ ${esc.hora_dia.toUpperCase()}</span>
+                            <span class="badge-tag" style="background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; font-size:0.68rem; color:#fff;">🪨 ${esc.material_suelo.toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <div class="card-body" style="padding:15px; display:flex; flex-direction:column; gap:8px;">
+                        <h4 class="card-title" style="margin:0; font-size:0.95rem; color:#fff; font-weight:600;">${esc.nombre}</h4>
+                        <p class="card-desc" style="margin:0; font-size:0.8rem; color:var(--texto-secundario); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:34px;">${esc.descripcion}</p>
+                        <div class="card-footer" style="margin-top:5px;">
+                            <button type="button" class="btn btn-sm btn-danger" style="font-size:0.75rem; padding: 4px 10px; width:100%;" onclick="eliminarEscenografia('${esc.nombre}')">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
     } catch (error) {
         console.error("Error cargando escenografías:", error);
     }
@@ -1447,9 +1496,135 @@ async function subirImagenPropiaEscena(proyectoId, escenaNum, file) {
         } else {
             showToast('❌ Error subiendo la imagen propia', 'error');
         }
-    } catch (error) {
-        showToast('❌ Error de conexión al subir la imagen propia', 'error');
     } finally {
         if (overlay) overlay.classList.remove('active');
+    }
+}
+
+// =======================================================================
+// ADMINISTRACIÓN DE ESCENARIOS INTEGRADA EN EL VIDEO STUDIO
+// =======================================================================
+let generatedScenaryBlob = null;
+
+// Pre-generar fondo con Pollinations IA (Gratis)
+async function preGenerarFondoIA() {
+    const btn = document.getElementById('btnGenFondo');
+    const desc = document.getElementById('scDesc').value.trim();
+    const clima = document.getElementById('scClima').value;
+    const hora = document.getElementById('scHora').value;
+    const suelo = document.getElementById('scSuelo').value;
+    const preview = document.getElementById('previewGenImg');
+
+    if (!desc) {
+        showToast("Escribe una descripción en el formulario para guiar a la IA", "warning");
+        return;
+    }
+
+    if (btn) {
+        btn.innerText = "🎨 Generando fondo...";
+        btn.disabled = true;
+    }
+
+    try {
+        const promptFull = `3d animation style, Pixar style, detailed background scenery of ${desc}. Weather: ${clima}, time of day: ${hora}, ground material: ${suelo}, consistent visual scenery backdrop, clean environment, beautiful masterwork, 4k resolution`;
+        const promptCod = encodeURIComponent(promptFull);
+        const seed = Math.floor(Math.random() * 99999);
+        const url = `https://image.pollinations.ai/prompt/${promptCod}?width=1024&height=576&nologo=true&seed=${seed}&model=flux`;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Falla al contactar a la IA");
+        const blob = await response.blob();
+
+        generatedScenaryBlob = blob;
+
+        const objectURL = URL.createObjectURL(blob);
+        if (preview) {
+            preview.src = objectURL;
+            preview.style.display = "block";
+        }
+
+        showToast("✨ Fondo pre-generado con éxito", "success");
+
+    } catch (e) {
+        console.error("Error pre-generando fondo:", e);
+        showToast("No se pudo conectar con el motor de IA de Pollinations", "error");
+    } finally {
+        if (btn) {
+            btn.innerText = "🎨 Pre-generar con IA";
+            btn.disabled = false;
+        }
+    }
+}
+
+// Guardar o Editar escenografía
+async function guardarEscenografia(event) {
+    event.preventDefault();
+
+    const form = document.getElementById('formEscenario');
+    const nombre = document.getElementById('scName').value.trim();
+    const descripcion = document.getElementById('scDesc').value.trim();
+    const clima = document.getElementById('scClima').value;
+    const hora_dia = document.getElementById('scHora').value;
+    const material_suelo = document.getElementById('scSuelo').value;
+    const inputImagen = document.getElementById('scImage');
+    const preview = document.getElementById('previewGenImg');
+
+    const formData = new FormData();
+    formData.append('nombre', nombre);
+    formData.append('descripcion', descripcion);
+    formData.append('clima', clima);
+    formData.append('hora_dia', hora_dia);
+    formData.append('material_suelo', material_suelo);
+
+    if (inputImagen && inputImagen.files.length > 0) {
+        formData.append('imagen', inputImagen.files[0]);
+    } else if (generatedScenaryBlob) {
+        const file = new File([generatedScenaryBlob], `${nombre.replace(/\s/g, '_')}_ia.jpg`, { type: 'image/jpeg' });
+        formData.append('imagen', file);
+    }
+
+    try {
+        const res = await fetch('/api/escenografias', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            showToast(data.message, 'success');
+            if (form) form.reset();
+            generatedScenaryBlob = null;
+            if (preview) preview.style.display = 'none';
+            cargarEscenografias();
+        } else {
+            showToast(data.message || 'Error al guardar', 'error');
+        }
+
+    } catch (e) {
+        console.error("Error al guardar escenario:", e);
+        showToast("Error de conexión al guardar el escenario", "error");
+    }
+}
+
+// Eliminar escenografía
+async function eliminarEscenografia(nombre) {
+    if (!confirm(`¿Eliminar definitivamente el escenario '${nombre}'?`)) return;
+
+    try {
+        const res = await fetch(`/api/escenografias/${encodeURIComponent(nombre)}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            showToast(data.message, 'success');
+            cargarEscenografias();
+        } else {
+            showToast(data.message || 'Error al eliminar', 'error');
+        }
+
+    } catch (e) {
+        console.error("Error al eliminar escenario:", e);
+        showToast("Error de conexión al eliminar el escenario", "error");
     }
 }

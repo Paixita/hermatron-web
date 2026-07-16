@@ -249,3 +249,41 @@
     background: #5E6AD2;
     transform: rotate(180deg);
 }
+
+/* AI Generator Sub-panel */
+.ai-generator-panel {
+    background: rgba(124, 77, 255, 0.05);
+    border: 1px dashed rgba(124, 77, 255, 0.3);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ai-generator-panel span {
+    font-size: 0.75rem;
+    color: var(--texto-secundario);
+}
+.preview-gen-image {
+    width: 100%;
+    height: 130px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--borde);
+    display: none;
+}
+.btn-gen-ai {
+    background: var(--acento);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.btn-gen-ai:hover {
+    opacity: 0.9;
+}

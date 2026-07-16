@@ -22,7 +22,7 @@
             </a>
             
             <div class="studio-actions-top">
-                <a href="/escenografias" class="btn btn-secondary">🏞️ Escenarios</a>
+                <a href="#scenographyManagerContainer" class="btn btn-secondary" style="scroll-behavior: smooth;">🏞️ Escenarios</a>
                 <a href="/" class="btn btn-nav">💬 Chat</a>
                 <button class="btn btn-secondary" onclick="document.getElementById('fileImportVideo').click()">📂 Importar</button>
                 <input type="file" id="fileImportVideo" accept="video/*" style="display:none" onchange="importarVideoLocalStudio(this.files[0])">
@@ -222,6 +222,86 @@
                     </div>
                     <div id="storyboardGrid" class="storyboard-grid-responsive">
                         <!-- Las tarjetas de escenas se inyectarán aquí -->
+                    </div>
+                </div>
+
+                <!-- Biblioteca y Creador de Escenarios Integrado (Full Width) -->
+                <div id="scenographyManagerContainer" class="storyboard-bottom-section" style="margin-top: 30px;">
+                    <div class="sc-section-header" style="background: linear-gradient(135deg, #1b1335 0%, #110d24 100%);">
+                        <h3>🏞️ Biblioteca y Creador de Escenarios Consistentes</h3>
+                    </div>
+                    <div class="escenarios-layout-studio" style="display: grid; grid-template-columns: 360px 1fr; gap: 25px; padding: 25px; background: #0b0b0d;">
+                        <!-- Formulario de Registro -->
+                        <div class="escenarios-sidebar-studio" style="background: rgba(255,255,255,0.01); border: 1px solid var(--borde); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 15px;">
+                            <h4 style="margin:0 0 5px 0; color:#fff; font-size:1.05rem;">🏞️ Registrar Escenario</h4>
+                            <p style="font-size:0.75rem; color:var(--texto-secundario); margin:0 0 10px 0;">Define el set de fondo para tus personajes.</p>
+                            
+                            <form id="formEscenario" onsubmit="guardarEscenografia(event)" style="display:flex; flex-direction:column; gap:12px;">
+                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                    <label for="scName" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">📋 Nombre de Escenografía</label>
+                                    <input type="text" id="scName" required placeholder="Ej: La Tienda, El Taller de Carlos" class="input-form" style="width:100%; box-sizing:border-box; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px;">
+                                </div>
+
+                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                    <label for="scDesc" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🔥 Descripción detallada para la IA</label>
+                                    <textarea id="scDesc" required placeholder="Describe las paredes, luz, ambiente, clima..." class="textarea-form" style="width:100%; box-sizing:border-box; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px; resize:vertical; min-height:80px;"></textarea>
+                                </div>
+
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                    <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                        <label for="scClima" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🌦️ Clima</label>
+                                        <select id="scClima" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
+                                            <option value="despejado" selected>Despejado</option>
+                                            <option value="lluvioso">Lluvioso</option>
+                                            <option value="nublado">Nublado</option>
+                                            <option value="neblina">Neblina</option>
+                                            <option value="soleado">Soleado</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                        <label for="scHora" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">⏰ Hora</label>
+                                        <select id="scHora" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
+                                            <option value="dia" selected>Día</option>
+                                            <option value="noche">Noche</option>
+                                            <option value="atardecer">Atardecer</option>
+                                            <option value="amanecer">Amanecer</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                    <label for="scSuelo" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🪨 Suelo</label>
+                                    <select id="scSuelo" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
+                                        <option value="asfalto" selected>Asfalto/Pavimento</option>
+                                        <option value="empedrado">Empedrado</option>
+                                        <option value="tierra">Tierra</option>
+                                        <option value="cemento">Cemento</option>
+                                        <option value="baldosas">Baldosas</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                    <label style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">📸 Imagen de Referencia</label>
+                                    <input type="file" id="scImage" accept="image/*" class="input-form" style="font-size:0.75rem; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 6px 12px; border-radius: 6px;">
+                                </div>
+
+                                <div class="ai-generator-panel">
+                                    <span>💡 ¿No tienes imagen? Genérala con IA gratis:</span>
+                                    <img id="previewGenImg" class="preview-gen-image" src="" alt="Fondo generado">
+                                    <button type="button" class="btn-gen-ai" id="btnGenFondo" onclick="preGenerarFondoIA()">🎨 Pre-generar con IA</button>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary" style="margin-top:10px; padding:12px; font-weight:700; width:100%;">💾 Guardar Escenario</button>
+                            </form>
+                        </div>
+                        
+                        <!-- Listado de Escenarios -->
+                        <div style="flex:1; display:flex; flex-direction:column; gap:15px;">
+                            <h4 style="margin:0; color:#fff; font-size:1.05rem;">🌍 Biblioteca de Escenarios Activos</h4>
+                            <div id="gridEscenarios" class="storyboard-grid-responsive" style="padding:0; background:transparent;">
+                                <!-- Los escenarios registrados se inyectarán aquí -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </main>

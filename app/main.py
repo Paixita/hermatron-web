@@ -551,11 +551,7 @@ async def escenografias_page(request: Request, current_user: dict = Depends(auth
     if not current_user:
         return RedirectResponse(url="/login")
         
-    return templates.TemplateResponse(
-        request=request, 
-        name="escenografias.html", 
-        context={"request": request, "title": "HERMATRON - Diseño de Escenarios", "user": current_user}
-    )
+    return RedirectResponse(url="/videos#scenographyManagerContainer")
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
