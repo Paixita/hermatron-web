@@ -1,0 +1,25 @@
+﻿====================================================
+  HERMATRON - Instrucciones para reactivar
+====================================================
+
+REQUISITOS PREVIOS (instalar una sola vez en el nuevo PC):
+  1. Python 3.11+  → https://www.python.org/downloads/
+  2. Git            → https://git-scm.com/
+
+PASOS PARA REACTIVAR:
+  1. Copia esta carpeta a donde quieras en el nuevo PC
+  2. Abre una terminal (CMD o PowerShell) dentro de la carpeta
+  3. Instala las dependencias:
+       pip install -r requirements.txt
+  4. Ejecuta el proyecto:
+       python app.py   (o doble clic en iniciar.bat)
+
+ARCHIVOS IMPORTANTES:
+  - .env             → Variables de entorno y claves API
+  - requirements.txt → Dependencias de Python
+  - hermatron.db     → Base de datos local (SQLite)
+  - README.md        → Documentación del proyecto
+
+NOTAS:
+  - Las carpetas venv/.venv se regeneran automáticamente
+  - NO eliminar el archivo .env

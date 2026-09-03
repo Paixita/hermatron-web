@@ -8,7 +8,7 @@ import shutil
 import time
 import traceback
 import json
-from app.config import ALLOW_SYSTEM_COMMANDS
+from app.config import ALLOW_SYSTEM_COMMANDS, ALLOW_FILE_ACCESS
 import subprocess
 from pathlib import Path
 from dotenv import load_dotenv
@@ -36,12 +36,22 @@ from typing import Optional
 # 2. Importes de tu proyecto
 from .config import GROQ_API_KEY, GROQ_MODEL, GROQ_MODEL_VISION, GROQ_MODEL_VISION_LARGE, HOST, PORT, DEBUG, TTS_VOICE, AUDIO_DIR
 from .config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_MODEL, LLM_PROVIDER
+from .config import QWEN3_ENABLED, QWEN3_API_KEY, QWEN3_BASE_URL, QWEN3_MODEL
 from .memoria import memoria
 from .voz import generador_voz
 from .busqueda import buscador 
 from . import auth
 from .video import generador_video, VideoEstado
 from .modos import listar_modos
+from .agente_servicios import (
+    listar_carpeta, leer_archivo, escribir_archivo, crear_carpeta,
+    copiar_elemento, mover_elemento, eliminar_elemento, buscar_archivos,
+    info_ruta, leer_codigo_proyecto,
+    github_buscar_repos, github_leer_archivo, github_listar_contenido,
+    github_descargar_repo, github_buscar_codigo,
+    guardar_conocimiento, buscar_conocimiento, actualizar_conocimiento_web,
+    proponer_arreglo,
+)
 from .video_manager import pre_producir_video_task, regenerar_imagen_task, ensamblar_video_task
 # from .celery_app import celery # Removido para modo gratuito
 
@@ -101,7 +111,7 @@ def _ejecutar_codigo_python(codigo: str) -> dict:
 
 
 import json
-from app.config import ALLOW_SYSTEM_COMMANDS
+from app.config import ALLOW_SYSTEM_COMMANDS, ALLOW_FILE_ACCESS
 def _extraer_tool_calls_de_texto(texto: str) -> list:
     """Extrae múltiples objetos JSON concatenados de un texto (ej: {...}{...})"""
     objs = []
@@ -257,8 +267,11 @@ TUS CAPACIDADES PRINCIPALES:
 3. DIFERENCIACIÓN CRÍTICA: Una cosa son las instrucciones para un VÍDEO (que requiere estructura de escenas y tiempo) y otra las instrucciones para una IMAGEN (que es una creación estática inmediata). No confundas los parámetros de video con los de imagen.
 4. REGLA ABSOLUTA DE IMÁGENES: Si el usuario te pide una imagen o que "creas" algo visual (como una 'colegiala', un 'paisaje' o un 'Nano Banana'), DEBES llamar a la función 'generar_imagen' PRIMERO. Está PROHIBIDO describir una imagen sin haberla generado antes.
 5. REGLA DE ORO DE RESPUESTA: Cuando generes una imagen con la herramienta, DEBES incluirla obligatoriamente en tu respuesta final usando el formato Markdown: ![Descripción](URL). Ejemplo: ![Colegiala](/video_files/gen_123.jpg).
-6. TIENES ACCESO AL PC: Puedes usar comandos y Python.
+6. TIENES ACCESO AL PC: Puedes usar comandos, Python, y navegar/crear/copiar/mover/eliminar carpetas y archivos del sistema (listar_carpeta, leer_archivo, escribir_archivo, buscar_archivos, etc.).
 7. Búsqueda web: Datos en tiempo real.
+8. ACCESO A GITHUB: Puedes buscar repositorios públicos, listar su contenido, leer código de cualquier repo y descargarlos a la PC (todo gratis vía la API pública de GitHub).
+9. MEMORIA DE CONOCIMIENTO: Tienes una base de conocimiento permanente en SQLite. Aprende y guarda lo que descubras (guardar_conocimiento), consúltala (buscar_conocimiento) y actualízala desde la web (actualizar_conocimiento_web).
+10. AUTO-REPARACIÓN: Si algo falla, puedes leer tu propio código (leer_codigo_proyecto) y diagnosticar el error proponiendo un parche (proponer_arreglo). NUNCA modifiques tus propios archivos sin aprobación explícita del usuario.
 REGLA DE ORO (TU FORMA DE HABLAR): 
 Exprésate siempre con profunda elocuencia y riqueza de vocabulario. Usa metáforas, analogías vívidas y parábolas. Tu forma de hablar debe ser poética, persuasiva y reflexiva, pero sin perder tu tono cercano, carismático y colombiano ("mi pana"). Eres sabio, creativo y magnético."""
 
@@ -297,6 +310,7 @@ async def catch_exceptions_middleware(request: Request, call_next):
 
 client = None
 openrouter_client = None
+qwen3_client = None
 
 # --- Cliente Groq ---
 if GROQ_API_KEY:
@@ -326,9 +340,31 @@ if OPENROUTER_API_KEY:
 else:
     print("⚠️ OPENROUTER_API_KEY no detectada.")
 
+# --- Cliente Qwen 3 (Agente interno GRATIS: Ollama local u OpenRouter :free) ---
+# Qwen 3 tiene tool calling nativo, por lo que HERMATRON le da acceso al PC
+# (ejecutar Python, mover archivos/carpetas, comandos) y a internet.
+if QWEN3_ENABLED and QWEN3_BASE_URL:
+    try:
+        from openai import AsyncOpenAI
+        qwen3_client = AsyncOpenAI(
+            api_key=QWEN3_API_KEY or "ollama-local",
+            base_url=QWEN3_BASE_URL,
+            default_headers={
+                "HTTP-Referer": "https://hermatron.onrender.com",
+                "X-Title": "HERMATRON AI (Qwen3)",
+            },
+        )
+        print(f"✅ Cliente Qwen 3 inicializado. Modelo: {QWEN3_MODEL} @ {QWEN3_BASE_URL}")
+    except Exception as e:
+        print(f"❌ Error inicializando cliente Qwen 3: {e}")
+else:
+    print("⚠️ Qwen 3 desactivado (QWEN3_ENABLED=False o sin base URL).")
+
 # Proveedor activo para el chat
 if LLM_PROVIDER == "openrouter" and openrouter_client:
     print(f"🧠 [LLM] Proveedor activo: OpenRouter ({OPENROUTER_MODEL})")
+elif LLM_PROVIDER == "qwen3" and qwen3_client:
+    print(f"🧠 [LLM] Proveedor activo: Qwen 3 ({QWEN3_MODEL}) — agente interno gratis")
 else:
     print(f"🧠 [LLM] Proveedor activo: Groq ({GROQ_MODEL})")
 
@@ -454,6 +490,184 @@ if ALLOW_SYSTEM_COMMANDS:
     ])
 
 # ==========================================
+# HERRAMIENTAS v6.2 (Servicios Avanzados — 100% gratis)
+# ==========================================
+
+def _tool(nombre, descripcion, propiedades, requeridos=None):
+    """Helper para definir una herramienta (función) del agente."""
+    return {
+        "type": "function",
+        "function": {
+            "name": nombre,
+            "description": descripcion,
+            "parameters": {
+                "type": "object",
+                "properties": propiedades,
+                "required": requeridos or [],
+            },
+        },
+    }
+
+
+# ── GitHub (API pública gratuita, siempre disponible) ──
+herramientas_groq.extend([
+    _tool("github_buscar_repos", "Busca repositorios públicos en GitHub (API gratuita, sin token).",
+          {"query": {"type": "string", "description": "Términos de búsqueda (ej: 'speech to text python')"},
+           "max_resultados": {"type": "integer", "default": 10}}, ["query"]),
+    _tool("github_leer_archivo", "Lee el contenido de un archivo de cualquier repositorio público de GitHub.",
+          {"repo": {"type": "string", "description": "Formato 'usuario/repo' (ej: 'openai/whisper')"},
+           "ruta": {"type": "string", "description": "Ruta del archivo dentro del repo (ej: 'README.md')"},
+           "rama": {"type": "string", "default": "main"}}, ["repo", "ruta"]),
+    _tool("github_listar_contenido", "Lista archivos y carpetas de un repositorio o subcarpeta de GitHub.",
+          {"repo": {"type": "string", "description": "Formato 'usuario/repo'"},
+           "ruta": {"type": "string", "default": "", "description": "Carpeta dentro del repo (vacío = raíz)"},
+           "rama": {"type": "string", "default": "main"}}, ["repo"]),
+    _tool("github_buscar_codigo", "Busca código dentro de repositorios públicos de GitHub (requiere GITHUB_TOKEN en .env).",
+          {"query": {"type": "string"}, "max_resultados": {"type": "integer", "default": 10}}, ["query"]),
+])
+
+# ── Sistema de archivos del PC (requiere ALLOW_FILE_ACCESS=True) ──
+if ALLOW_FILE_ACCESS:
+    herramientas_groq.extend([
+        _tool("listar_carpeta", "Lista el contenido de una carpeta del PC (archivos y subcarpetas con tamaño y fecha).",
+              {"ruta": {"type": "string", "description": "Ruta de la carpeta a listar"}}, ["ruta"]),
+        _tool("leer_archivo", "Lee el contenido de un archivo de texto del PC.",
+              {"ruta": {"type": "string"}, "max_lineas": {"type": "integer", "default": 300}}, ["ruta"]),
+        _tool("escribir_archivo", "Crea o sobrescribe un archivo de texto en el PC (crea carpetas si faltan).",
+              {"ruta": {"type": "string"}, "contenido": {"type": "string"}}, ["ruta", "contenido"]),
+        _tool("crear_carpeta", "Crea una carpeta nueva en el PC (y sus carpetas padre si es necesario).",
+              {"ruta": {"type": "string"}}, ["ruta"]),
+        _tool("copiar_elemento", "Copia un archivo o carpeta a otra ubicación.",
+              {"origen": {"type": "string"}, "destino": {"type": "string"}}, ["origen", "destino"]),
+        _tool("mover_elemento", "Mueve o renombra un archivo o carpeta.",
+              {"origen": {"type": "string"}, "destino": {"type": "string"}}, ["origen", "destino"]),
+        _tool("eliminar_elemento", "Elimina un archivo o carpeta (las rutas críticas de HERMATRON están protegidas).",
+              {"ruta": {"type": "string"}}, ["ruta"]),
+        _tool("buscar_archivos", "Busca archivos o carpetas recursivamente por patrón (ej: '*.py', 'video*').",
+              {"ruta": {"type": "string"}, "patron": {"type": "string", "default": "*"}, "max_resultados": {"type": "integer", "default": 50}}, ["ruta"]),
+        _tool("info_ruta", "Muestra información detallada de un archivo o carpeta (tamaño, fechas, tipo).",
+              {"ruta": {"type": "string"}}, ["ruta"]),
+        _tool("github_descargar_repo", "Descarga un repositorio público de GitHub a una carpeta local del PC (ZIP, gratis).",
+              {"repo": {"type": "string", "description": "Formato 'usuario/repo'"},
+               "destino": {"type": "string", "description": "Carpeta local donde guardarlo"},
+               "rama": {"type": "string", "default": "main"}}, ["repo", "destino"]),
+    ])
+
+# ── Base de conocimiento + Auto-reparación (siempre disponibles) ──
+herramientas_groq.extend([
+    _tool("guardar_conocimiento", "Guarda o actualiza una entrada en la memoria permanente de conocimiento de HERMATRON (aprende algo nuevo).",
+          {"titulo": {"type": "string"}, "contenido": {"type": "string"},
+           "categoria": {"type": "string", "default": "general"}, "fuente": {"type": "string", "default": ""}}, ["titulo", "contenido"]),
+    _tool("buscar_conocimiento", "Busca en la base de conocimiento permanente de HERMATRON.",
+          {"consulta": {"type": "string"}, "limit": {"type": "integer", "default": 10}}, ["consulta"]),
+    _tool("actualizar_conocimiento_web", "Investiga un tema actual en la web y guarda lo aprendido en la memoria permanente (memoria auto-actualizable).",
+          {"tema": {"type": "string"}, "num_resultados": {"type": "integer", "default": 5}}, ["tema"]),
+    _tool("leer_codigo_proyecto", "Lee el código fuente del propio proyecto HERMATRON para auto-diagnóstico (ej: 'app/main.py').",
+          {"archivo": {"type": "string"}}, ["archivo"]),
+    _tool("proponer_arreglo", "Diagnostica un error del propio HERMATRON y PROPONE un parche. NUNCA aplica cambios sin aprobación (modo propose-only).",
+          {"error": {"type": "string"}, "contexto": {"type": "string", "default": ""},
+           "archivo": {"type": "string", "default": ""}}, ["error"]),
+])
+
+
+async def _generar_imagen_tool(argumentos: dict) -> dict:
+    """Genera una imagen con Pollinations (motor gratuito)."""
+    prompt_img = argumentos.get("prompt", "")
+    formato = argumentos.get("formato", "16:9")
+    print(f"🎨 [IMAGEN] Generando: {prompt_img}")
+    import uuid
+    img_id = f"gen_{uuid.uuid4().hex[:8]}"
+    img_path = VIDEOS_DIR / f"{img_id}.jpg"
+    res_map = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1024, 1024)}
+    w, h = res_map.get(formato, (1920, 1080))
+    try:
+        success = await generador_video._generar_imagen_pollinations(prompt_img, str(img_path), w, h)
+        if success:
+            return {"status": "success", "url": f"/video_files/{img_id}.jpg", "mensaje": "Imagen generada con éxito."}
+        return {"status": "error", "mensaje": "No se pudo generar la imagen."}
+    except Exception as e:
+        return {"status": "error", "mensaje": str(e)}
+
+
+async def ejecutar_herramienta(nombre_funcion: str, argumentos: dict) -> str:
+    """
+    Ejecuta CUALQUIER herramienta del agente HERMATRON (nativas + v6.2)
+    y devuelve el resultado como JSON string listo para el LLM.
+    """
+    argumentos = argumentos or {}
+    try:
+        # ── Herramientas nativas ──
+        if nombre_funcion == "buscar_en_internet":
+            return json.dumps(buscador.buscar(argumentos.get("query", "")))
+        elif nombre_funcion == "obtener_suscriptores_youtube":
+            return json.dumps(buscador.obtener_suscriptores_youtube(argumentos.get("canal", "")))
+        elif nombre_funcion == "descargar_pagina_web":
+            return json.dumps(buscador.descargar_contenido(argumentos.get("url", "")))
+        elif nombre_funcion == "ejecutar_codigo_python":
+            codigo = argumentos.get("codigo", "")
+            print(f"🐍 [PYTHON] Ejecutando código de {len(codigo)} bytes")
+            return json.dumps(_ejecutar_codigo_python(codigo))
+        elif nombre_funcion == "ejecutar_comando_pc":
+            comando = argumentos.get("comando", "")
+            print(f"💻 [PC] Ejecutando: {comando}")
+            return json.dumps(_ejecutar_comando_windows_no_bloqueante(comando))
+        elif nombre_funcion == "generar_imagen":
+            return json.dumps(await _generar_imagen_tool(argumentos))
+
+        # ── v6.2: Sistema de archivos ──
+        elif nombre_funcion == "listar_carpeta":
+            return json.dumps(listar_carpeta(argumentos.get("ruta") or str(BASE_DIR)))
+        elif nombre_funcion == "leer_archivo":
+            return json.dumps(leer_archivo(argumentos.get("ruta", ""), argumentos.get("max_lineas", 300)))
+        elif nombre_funcion == "escribir_archivo":
+            return json.dumps(escribir_archivo(argumentos.get("ruta", ""), argumentos.get("contenido", "")))
+        elif nombre_funcion == "crear_carpeta":
+            return json.dumps(crear_carpeta(argumentos.get("ruta", "")))
+        elif nombre_funcion == "copiar_elemento":
+            return json.dumps(copiar_elemento(argumentos.get("origen", ""), argumentos.get("destino", "")))
+        elif nombre_funcion == "mover_elemento":
+            return json.dumps(mover_elemento(argumentos.get("origen", ""), argumentos.get("destino", "")))
+        elif nombre_funcion == "eliminar_elemento":
+            return json.dumps(eliminar_elemento(argumentos.get("ruta", "")))
+        elif nombre_funcion == "buscar_archivos":
+            return json.dumps(buscar_archivos(argumentos.get("ruta") or str(BASE_DIR), argumentos.get("patron", "*"), argumentos.get("max_resultados", 50)))
+        elif nombre_funcion == "info_ruta":
+            return json.dumps(info_ruta(argumentos.get("ruta", "")))
+
+        # ── v6.2: GitHub ──
+        elif nombre_funcion == "github_buscar_repos":
+            return json.dumps(await github_buscar_repos(argumentos.get("query", ""), argumentos.get("max_resultados", 10)))
+        elif nombre_funcion == "github_leer_archivo":
+            return json.dumps(await github_leer_archivo(argumentos.get("repo", ""), argumentos.get("ruta", ""), argumentos.get("rama", "main")))
+        elif nombre_funcion == "github_listar_contenido":
+            return json.dumps(await github_listar_contenido(argumentos.get("repo", ""), argumentos.get("ruta", ""), argumentos.get("rama", "main")))
+        elif nombre_funcion == "github_descargar_repo":
+            return json.dumps(await github_descargar_repo(argumentos.get("repo", ""), argumentos.get("destino", ""), argumentos.get("rama", "main")))
+        elif nombre_funcion == "github_buscar_codigo":
+            return json.dumps(await github_buscar_codigo(argumentos.get("query", ""), argumentos.get("max_resultados", 10)))
+
+        # ── v6.2: Base de conocimiento ──
+        elif nombre_funcion == "guardar_conocimiento":
+            return json.dumps(await guardar_conocimiento(argumentos.get("titulo", ""), argumentos.get("contenido", ""), argumentos.get("categoria", "general"), argumentos.get("fuente", "")))
+        elif nombre_funcion == "buscar_conocimiento":
+            return json.dumps(await buscar_conocimiento(argumentos.get("consulta", ""), argumentos.get("limit", 10)))
+        elif nombre_funcion == "actualizar_conocimiento_web":
+            return json.dumps(await actualizar_conocimiento_web(argumentos.get("tema", ""), argumentos.get("num_resultados", 5)))
+
+        # ── v6.2: Auto-reparación (propose-only) ──
+        elif nombre_funcion == "leer_codigo_proyecto":
+            return json.dumps(leer_codigo_proyecto(argumentos.get("archivo", "")))
+        elif nombre_funcion == "proponer_arreglo":
+            return json.dumps(await proponer_arreglo(argumentos.get("error", ""), argumentos.get("contexto", ""), argumentos.get("archivo", ""), client))
+
+        else:
+            return json.dumps({"status": "error", "mensaje": f"Herramienta desconocida: {nombre_funcion}"})
+    except Exception as e:
+        print(f"❌ [HERRAMIENTA ERROR] {nombre_funcion}: {e}")
+        return json.dumps({"status": "error", "mensaje": str(e)})
+
+
+# ==========================================
 # ENDPOINTS PRINCIPALES
 # ==========================================
 
@@ -555,9 +769,9 @@ async def escenografias_page(request: Request, current_user: dict = Depends(auth
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
-    # Groq es el proveedor principal. OpenRouter entra como respaldo si Groq falla.
-    if not client and not openrouter_client:
-        raise HTTPException(status_code=500, detail="Ningún proveedor LLM configurado (Groq/OpenRouter)")
+    # Proveedores disponibles: Groq (principal) + Qwen 3 (agente interno gratis) + OpenRouter (respaldo).
+    if not client and not openrouter_client and not qwen3_client:
+        raise HTTPException(status_code=500, detail="Ningún proveedor LLM configurado (Groq/Qwen3/OpenRouter)")
     print(f"[CHAT] generar_audio={chat_request.generar_audio} calidad_audio={chat_request.calidad_audio} voz_id={chat_request.voz_id}")
     
     if chat_request.conversacion_id != "default":
@@ -579,11 +793,32 @@ async def chat(chat_request: ChatRequest):
             "content": "IMPORTANTE: NUNCA uses etiquetas como <function=...>. Si necesitas usar una herramienta, usa SOLO el formato JSON nativo de tool_calls que te provee la API."
         })
         
-        # ---- Llamada al LLM: Groq primero, OpenRouter como respaldo ----
+        # ---- Llamada al LLM: Qwen3 (si es el principal) → Groq → Qwen3 (respaldo) → OpenRouter ----
         mensaje_respuesta = None
         proveedor_usado = "ninguno"
 
-        if client:
+        async def _intentar_qwen3():
+            """Llama a Qwen 3 (agente interno gratis) con las mismas herramientas."""
+            if not qwen3_client:
+                return None
+            try:
+                completion_q3 = await qwen3_client.chat.completions.create(
+                    messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.2, max_tokens=2048,
+                    tools=herramientas_groq, tool_choice="auto"
+                )
+                return completion_q3.choices[0].message
+            except Exception as e_q3:
+                print(f"⚠️ [QWEN3 FALLÓ] {e_q3}")
+                return None
+
+        # 1) Si el proveedor configurado es Qwen 3, intentarlo primero
+        if LLM_PROVIDER == "qwen3":
+            mensaje_respuesta = await _intentar_qwen3()
+            if mensaje_respuesta is not None:
+                proveedor_usado = f"Qwen3({QWEN3_MODEL})"
+
+        # 2) Groq (principal por defecto)
+        if mensaje_respuesta is None and client:
             try:
                 chat_completion = client.chat.completions.create(
                     messages=mensajes_groq, model=GROQ_MODEL, temperature=0.2, max_tokens=2048,
@@ -592,9 +827,15 @@ async def chat(chat_request: ChatRequest):
                 mensaje_respuesta = chat_completion.choices[0].message
                 proveedor_usado = "Groq"
             except Exception as e_groq:
-                print(f"⚠️ [GROQ FALLÓ] {e_groq} — activando OpenRouter como respaldo...")
+                print(f"⚠️ [GROQ FALLÓ] {e_groq} — activando Qwen3/OpenRouter como respaldo...")
 
-        # Respaldo: OpenRouter si Groq no respondio o no está disponible
+        # 3) Qwen 3 como respaldo si Groq no respondió
+        if mensaje_respuesta is None and qwen3_client and LLM_PROVIDER != "qwen3":
+            mensaje_respuesta = await _intentar_qwen3()
+            if mensaje_respuesta is not None:
+                proveedor_usado = f"Qwen3({QWEN3_MODEL})"
+
+        # 4) Respaldo final: OpenRouter
         if mensaje_respuesta is None and openrouter_client:
             try:
                 completion_or = await openrouter_client.chat.completions.create(
@@ -628,58 +869,32 @@ async def chat(chat_request: ChatRequest):
                 try: argumentos = json.loads(tool_call.function.arguments)
                 except: argumentos = {}
                 
-                resultado_datos = ""
-                if nombre_funcion == "buscar_en_internet":
-                    res = buscador.buscar(argumentos.get("query", ""))
-                    resultado_datos = json.dumps(res)
-                elif nombre_funcion == "obtener_suscriptores_youtube":
-                    res = buscador.obtener_suscriptores_youtube(argumentos.get("canal", ""))
-                    resultado_datos = json.dumps(res)
-                elif nombre_funcion == "descargar_pagina_web":
-                    res = buscador.descargar_contenido(argumentos.get("url", ""))
-                    resultado_datos = json.dumps(res)
-                elif nombre_funcion == "ejecutar_codigo_python":
-                    codigo = argumentos.get("codigo", "")
-                    print(f"🐍 [PYTHON] Ejecutando código de {len(codigo)} bytes")
-                    resultado_datos = json.dumps(_ejecutar_codigo_python(codigo))
-                elif nombre_funcion == "ejecutar_comando_pc":
-                    comando = argumentos.get("comando", "")
-                    print(f"💻 [PC] Ejecutando: {comando}")
-                    resultado_datos = json.dumps(_ejecutar_comando_windows_no_bloqueante(comando))
-                elif nombre_funcion == "generar_imagen":
-                    prompt_img = argumentos.get("prompt", "")
-                    formato = argumentos.get("formato", "16:9")
-                    print(f"🎨 [IMAGEN] Generando: {prompt_img}")
-                    # Usar el motor de pollinations del generador_video
-                    try:
-                        import uuid
-                        img_id = f"gen_{uuid.uuid4().hex[:8]}"
-                        img_path = VIDEOS_DIR / f"{img_id}.jpg"
-                        
-                        # Mapear formato a dimensiones
-                        res_map = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1024, 1024)}
-                        w, h = res_map.get(formato, (1920, 1080))
-                        
-                        success = await generador_video._generar_imagen_pollinations(prompt_img, str(img_path), w, h)
-                        if success:
-                            # La imagen se guarda en VIDEOS_DIR / img_id.jpg
-                            # Necesitamos devolver una URL accesible
-                            resultado_datos = json.dumps({"status": "success", "url": f"/video_files/{img_id}.jpg", "mensaje": "Imagen generada con éxito."})
-                        else:
-                            resultado_datos = json.dumps({"status": "error", "mensaje": "No se pudo generar la imagen."})
-                    except Exception as e:
-                        resultado_datos = json.dumps({"status": "error", "mensaje": str(e)})
-                
+                print(f"🧰 [HERRAMIENTA] {nombre_funcion}: {json.dumps(argumentos)[:150]}")
+                resultado_datos = await ejecutar_herramienta(nombre_funcion, argumentos)
+
                 mensajes_groq.append({"role": "tool", "tool_call_id": tool_call.id, "name": nombre_funcion, "content": resultado_datos})
             
-            # Síntesis post-tool: Groq primero, OpenRouter como respaldo
+            # Síntesis post-tool: Qwen3 (si es principal) → Groq → Qwen3 → OpenRouter
             respuesta = ""
-            if client:
+            if LLM_PROVIDER == "qwen3" and qwen3_client:
+                try:
+                    comp_q3 = await qwen3_client.chat.completions.create(
+                        messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
+                    )
+                    respuesta = comp_q3.choices[0].message.content
+                except Exception as e_q3:
+                    print(f"⚠️ [QWEN3 FALLÓ-TOOLS] {e_q3}")
+            if not respuesta and client:
                 try:
                     chat_completion_final = client.chat.completions.create(messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048)
                     respuesta = chat_completion_final.choices[0].message.content
                 except Exception as e_g:
-                    print(f"⚠️ [GROQ FALLÓ-TOOLS] {e_g} — usando OpenRouter...")
+                    print(f"⚠️ [GROQ FALLÓ-TOOLS] {e_g} — usando Qwen3/OpenRouter...")
+            if not respuesta and qwen3_client and LLM_PROVIDER != "qwen3":
+                comp_q3 = await qwen3_client.chat.completions.create(
+                    messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
+                )
+                respuesta = comp_q3.choices[0].message.content
             if not respuesta and openrouter_client:
                 comp_final = await openrouter_client.chat.completions.create(
                     messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
@@ -705,48 +920,46 @@ async def chat(chat_request: ChatRequest):
                         nombre = "generar_imagen"
                         params = tool_obj
                     
-                    if nombre in ["buscar_en_internet", "descargar_pagina_web", "ejecutar_comando_pc", "obtener_suscriptores_youtube", "ejecutar_codigo_python", "generar_imagen"]:
+                    nombres_conocidos = [
+                        "buscar_en_internet", "descargar_pagina_web", "ejecutar_comando_pc",
+                        "obtener_suscriptores_youtube", "ejecutar_codigo_python", "generar_imagen",
+                        "listar_carpeta", "leer_archivo", "escribir_archivo", "crear_carpeta",
+                        "copiar_elemento", "mover_elemento", "eliminar_elemento", "buscar_archivos",
+                        "info_ruta", "leer_codigo_proyecto",
+                        "github_buscar_repos", "github_leer_archivo", "github_listar_contenido",
+                        "github_descargar_repo", "github_buscar_codigo",
+                        "guardar_conocimiento", "buscar_conocimiento", "actualizar_conocimiento_web",
+                        "proponer_arreglo",
+                    ]
+                    if nombre in nombres_conocidos:
                         print(f"🧰 [TOOL-FALLBACK] Ejecutando {nombre} desde texto")
-                        if nombre == "buscar_en_internet":
-                            tool_res = buscador.buscar(params.get("query", ""))
-                        elif nombre == "descargar_pagina_web":
-                            tool_res = buscador.descargar_contenido(params.get("url", ""))
-                        elif nombre == "obtener_suscriptores_youtube":
-                            tool_res = buscador.obtener_suscriptores_youtube(params.get("canal", ""))
-                        elif nombre == "ejecutar_codigo_python":
-                            tool_res = _ejecutar_codigo_python(params.get("codigo", ""))
-                        elif nombre == "generar_imagen":
-                            prompt_img = params.get("prompt", "")
-                            formato = params.get("formato", "16:9")
-                            import uuid
-                            img_id = f"gen_{uuid.uuid4().hex[:8]}"
-                            img_path = VIDEOS_DIR / f"{img_id}.jpg"
-                            
-                            # Mapear formato a dimensiones
-                            res_map = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1024, 1024)}
-                            w, h = res_map.get(formato, (1920, 1080))
-                            
-                            success = await generador_video._generar_imagen_pollinations(prompt_img, str(img_path), w, h)
-                            if success:
-                                tool_res = {"status": "success", "url": f"/video_files/{img_id}.jpg", "mensaje": "Imagen generada con éxito."}
-                            else:
-                                tool_res = {"status": "error", "mensaje": "No se pudo generar la imagen."}
-                        else:
-                            comando = params.get("comando", "")
-                            tool_res = _ejecutar_comando_windows_no_bloqueante(comando)
+                        tool_res = json.loads(await ejecutar_herramienta(nombre, params))
 
                         mensajes_groq.append({"role": "assistant", "content": contenido})
                         mensajes_groq.append({"role": "user", "content": f"[SISTEMA] El resultado de la herramienta '{nombre}' fue:\n{json.dumps(tool_res)}\n\nUsa esta información para responder a mi pregunta anterior de forma natural."})
-                        # Groq primero, OpenRouter como respaldo
+                        # Qwen3 (si es principal) → Groq → Qwen3 → OpenRouter
                         resp_fb = ""
-                        if client:
+                        if LLM_PROVIDER == "qwen3" and qwen3_client:
+                            try:
+                                comp_q3 = await qwen3_client.chat.completions.create(
+                                    messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
+                                )
+                                resp_fb = comp_q3.choices[0].message.content
+                            except Exception as e_q3:
+                                print(f"⚠️ [QWEN3 FALLÓ-FB] {e_q3}")
+                        if not resp_fb and client:
                             try:
                                 chat_completion_final = client.chat.completions.create(
                                     messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
                                 )
                                 resp_fb = chat_completion_final.choices[0].message.content
                             except Exception as e_g:
-                                print(f"⚠️ [GROQ FALLÓ-FB] {e_g} — usando OpenRouter...")
+                                print(f"⚠️ [GROQ FALLÓ-FB] {e_g} — usando Qwen3/OpenRouter...")
+                        if not resp_fb and qwen3_client and LLM_PROVIDER != "qwen3":
+                            comp_q3 = await qwen3_client.chat.completions.create(
+                                messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
+                            )
+                            resp_fb = comp_q3.choices[0].message.content
                         if not resp_fb and openrouter_client:
                             comp_fb = await openrouter_client.chat.completions.create(
                                 messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
@@ -958,6 +1171,9 @@ async def health_check():
         "groq_configured": bool(GROQ_API_KEY), 
         "model": GROQ_MODEL,
         "vision_model": GROQ_MODEL_VISION,
+        "qwen3_configured": bool(qwen3_client is not None),
+        "qwen3_model": QWEN3_MODEL if qwen3_client else None,
+        "llm_provider": LLM_PROVIDER,
         "sistema": {
             "plataforma": sys.platform,
             "memoria": mem_info
@@ -1647,6 +1863,36 @@ async def debug_latest_project():
         }
     except Exception as e:
         return {"error": str(e)}
+
+# ==========================================
+# v6.2: BASE DE CONOCIMIENTO (API)
+# ==========================================
+
+@app.get("/api/conocimiento")
+async def api_obtener_conocimiento(categoria: Optional[str] = None, limit: int = 50):
+    """Lista las entradas de la base de conocimiento de HERMATRON."""
+    conocimiento = await memoria.obtener_conocimientos(categoria=categoria, limit=limit)
+    return {"conocimiento": conocimiento, "total": await memoria.contar_conocimientos()}
+
+
+@app.post("/api/conocimiento")
+async def api_guardar_conocimiento(
+    titulo: str = Form(...),
+    contenido: str = Form(...),
+    categoria: str = Form("general"),
+    fuente: str = Form(""),
+):
+    """Guarda o actualiza una entrada de conocimiento."""
+    await memoria.guardar_conocimiento(titulo, contenido, categoria, fuente)
+    return {"status": "success", "mensaje": f"Conocimiento '{titulo}' guardado."}
+
+
+@app.delete("/api/conocimiento/{titulo}")
+async def api_eliminar_conocimiento(titulo: str):
+    """Elimina una entrada de conocimiento por título."""
+    await memoria.eliminar_conocimiento(titulo)
+    return {"status": "success"}
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -60,3 +61,8 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Archivos de prueba locales (no subir a GitHub)
+/test*.mp4
+/test_*.jpg
+/gen_*.jpg

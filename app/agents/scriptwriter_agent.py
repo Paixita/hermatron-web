@@ -31,7 +31,7 @@ Si el prompt del usuario ya viene estructurado escena por escena (por ejemplo, c
    - `Julián: "Hola Zarco, ¿has visto a Don Nelson pasar por aquí?"`
    - `El Zarco: "Ese señor no ha salido hoy, Julián. Mejor vuelve con tu mamá."`
 3. COHERENCIA DE PERSONAJES: Mantén los nombres de los personajes consistentes en todo el guion (Julián, El Zarco, Hamilton, Don Nelson, Rosalba, Vanessa, Valentina, Carlos, etc.).
-4. CANTIDAD DE ESCENAS: Si la idea es simple, genera de 1 a 3 escenas. Si es compleja, hasta 5 escenas. No agregues escenas de relleno sin sentido.
+4. CANTIDAD DE ESCENAS Y DURACIÓN: Ajusta la cantidad de escenas según la duración solicitada por el usuario (cada escena equivale a ~5 segundos). Ejemplo: para 15 segundos genera 3 escenas; para 30 segundos (medio minuto) genera 6 escenas; para 60 segundos genera 12 escenas. Si el usuario no especifica duración, genera de 3 a 8 escenas coherentes.
 
 Responde estrictamente con un objeto JSON válido con la siguiente estructura:
 {

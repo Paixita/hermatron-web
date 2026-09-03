@@ -344,7 +344,7 @@ class GeneradorVideo:
                 "estilo_visual": "cinematográfico profesional",
                 "atmosfera": "misteriosa y reveladora",
                 "publico_objetivo": "público general interesado en el tema",
-                "duracion_estimada": "2-3 minutos",
+                "duracion_estimada": "10 segundos",
                 "referencia_cinematografica": "documental de Discovery Channel"
             })
         return "Todos los proveedores fallaron."
@@ -360,7 +360,7 @@ Analiza:
 - ESTILO VISUAL (documental, cinematográfico, minimalista, dramático, etc.)
 - ATMÓSFERA (oscura, luminosa, íntima, grandiosa, etc.)
 - PÚBLICO OBJETIVO
-- DURACIÓN ESTIMADA (basada en la complejidad)
+- DURACIÓN ESTIMADA (Analiza si el usuario indicó una duración deseada, ej: 15s, 30s, 60s, 2 minutos. Si no se indica, estima entre 15 y 60 segundos según la complejidad del tema)
 - REFERENCIA CINEMATOGRÁFICA (película o estilo similar)
 
 Responde SOLO con JSON válido, sin markdown ni texto extra:
@@ -369,7 +369,7 @@ Responde SOLO con JSON válido, sin markdown ni texto extra:
     "estilo_visual": "...",
     "atmosfera": "...",
     "publico_objetivo": "...",
-    "duracion_estimada": "2-4 minutos",
+    "duracion_estimada": "30 segundos",
     "referencia_cinematografica": "..."
 }
 """
@@ -392,7 +392,7 @@ Analiza este tema como director de cine profesional.
                 "estilo_visual": "cinematográfico profesional",
                 "atmosfera": "misteriosa y reveladora",
                 "publico_objetivo": "público general interesado en el tema",
-                "duracion_estimada": "2-3 minutos",
+                "duracion_estimada": "10 segundos",
                 "referencia_cinematografica": "documental de Discovery Channel"
             }
 
@@ -1235,16 +1235,20 @@ Responde SOLO JSON:
             prompt_en = await self._traducir_prompt(prompt)
             print(f"[FAL] Prompt en inglés: {prompt_en[:80]}...")
 
-            # Lista de modelos a intentar en orden
+            # Lista de modelos a intentar en orden.
+            # NOTA: cada modelo tiene SU PROPIO esquema de argumentos. Solo se
+            # pasan parámetros válidos por modelo para no romper la cascada:
+            #  - WAN 2.2: soporta resolution 1080p (Full HD) y hasta 81 frames.
+            #  - LTX y Mochi: NO aceptan "resolution", se deja el default del modelo.
             modelos = [
                 {
                     "id": "fal-ai/wan/v2.2/image-to-video",
                     "args": {
                         "prompt": prompt_en,
                         "image_url": imagen_path,
-                        "num_frames": 81,  # ~5 segundos a ~16fps
+                        "num_frames": 81,  # ~5 segundos a ~16fps (rango válido de WAN)
                         "frames_per_second": 16,
-                        "resolution": "720p",
+                        "resolution": "1080p",  # Full HD (antes 720p) — WAN 2.2 soporta 1080p
                         "enable_safety_checker": False,
                     }
                 },
@@ -1968,6 +1972,17 @@ Responde SOLO JSON:
             if audio_path and Path(audio_path).exists():
                 dur_total = self._obtener_duracion_audio(audio_path)
                 if dur_total <= 0: dur_total = 10.0
+
+            # ── GARANTIZAR DURACIÓN OBJETIVO (FLEXIBLE: 5s a 300s+) ──────────────
+            # Si la narración es más corta que el mínimo, se extiende el video.
+            # Si excede el máximo permitido (VIDEO_MAX_DURATION=300s), se ajusta.
+            from app.config import VIDEO_MIN_DURATION, VIDEO_MAX_DURATION
+            if dur_total < VIDEO_MIN_DURATION:
+                print(f"[VIDEO] Duración {dur_total:.1f}s < mínimo {VIDEO_MIN_DURATION}s → extendiendo a {VIDEO_MIN_DURATION}s")
+                dur_total = float(VIDEO_MIN_DURATION)
+            elif dur_total > VIDEO_MAX_DURATION:
+                print(f"[VIDEO] Duración {dur_total:.1f}s > máximo {VIDEO_MAX_DURATION}s → comprimiendo a {VIDEO_MAX_DURATION}s")
+                dur_total = float(VIDEO_MAX_DURATION)
             
             # --- Lógica de tiempos proporcionales para sincronizar subtítulos ---
             # Si una escena no tiene texto, le damos un peso equivalente a 15 caracteres

@@ -79,6 +79,18 @@ class MemoriaDB:
                     value TEXT NOT NULL
                 )
             """)
+
+            # Tabla de conocimiento (memoria permanente actualizable del agente)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS conocimiento (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    titulo TEXT NOT NULL UNIQUE,
+                    contenido TEXT NOT NULL,
+                    categoria TEXT DEFAULT 'general',
+                    fuente TEXT DEFAULT '',
+                    actualizado_en DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             
             # Tabla de conversaciones
             await db.execute("""
@@ -227,6 +239,53 @@ class MemoriaDB:
                         INSERT INTO escenografias (nombre, descripcion, clima, hora_dia, material_suelo, imagen_path)
                         VALUES (?, ?, ?, ?, ?, ?)
                     """, escenografias_semilla)
+
+            # Sembrar conocimiento inicial si la tabla está vacía
+            async with db.execute("SELECT COUNT(*) FROM conocimiento") as cursor:
+                row = await cursor.fetchone()
+                if row and row[0] == 0:
+                    conocimiento_semilla = [
+                        (
+                            "Capacidades HERMATRON v6.2",
+                            "HERMATRON es un asistente de IA multimodal: chat con voz, generación de video 1080p, imágenes IA, control del PC (archivos, comandos y Python), acceso a GitHub (API pública gratuita), búsqueda web y memoria permanente en SQLite.",
+                            "hermatron",
+                            "README.md",
+                        ),
+                        (
+                            "Servicios Avanzados v6.2",
+                            "Herramientas del agente: sistema de archivos del PC (listar_carpeta, leer_archivo, escribir_archivo, crear_carpeta, copiar_elemento, mover_elemento, eliminar_elemento, buscar_archivos, info_ruta); GitHub (github_buscar_repos, github_leer_archivo, github_listar_contenido, github_descargar_repo, github_buscar_codigo); conocimiento (guardar_conocimiento, buscar_conocimiento, actualizar_conocimiento_web); auto-reparación propose-only (leer_codigo_proyecto, proponer_arreglo).",
+                            "hermatron",
+                            "app/agente_servicios.py",
+                        ),
+                        (
+                            "Cómo iniciar HERMATRON",
+                            "Activar el entorno virtual, instalar requirements.txt, configurar .env con las API keys y ejecutar: python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 5001. Luego abrir http://localhost:5001 en el navegador.",
+                            "hermatron",
+                            "README.md",
+                        ),
+                        (
+                            "Estructura del proyecto",
+                            "app/ contiene el backend FastAPI, templates/ el frontend, static/ los recursos (CSS, JS, personajes, escenografías), videos/ los videos y proyectos generados, audio/ los audios, docs/ la documentación. La memoria persistente vive en hermatron.db (SQLite).",
+                            "hermatron",
+                            "README.md",
+                        ),
+                        (
+                            "Regla de auto-reparación",
+                            "HERMATRON NUNCA modifica su propio código sin aprobación explícita del usuario. Usa la herramienta proponer_arreglo para diagnosticar errores y proponer parches (modo propose-only).",
+                            "seguridad",
+                            "app/agente_servicios.py",
+                        ),
+                        (
+                            "GitHub gratis para el agente",
+                            "La API pública de GitHub es gratuita: 60 peticiones/hora y 10 búsquedas/min sin token. Para búsqueda de código y más límites se puede agregar GITHUB_TOKEN en .env (gratis, https://github.com/settings/tokens).",
+                            "github",
+                            "docs/openapi_hermatron.json",
+                        ),
+                    ]
+                    await db.executemany(
+                        "INSERT OR IGNORE INTO conocimiento (titulo, contenido, categoria, fuente) VALUES (?, ?, ?, ?)",
+                        conocimiento_semilla,
+                    )
 
             await db.commit()
         self._initialized = True
@@ -486,6 +545,72 @@ class MemoriaDB:
             await db.execute("DELETE FROM escenografias WHERE nombre = ?", (nombre,))
             await db.commit()
             print(f"[DB] 🗑️ Escenografía '{nombre}' eliminada")
+
+    # ─── Base de Conocimiento (memoria permanente actualizable) ───
+
+    async def guardar_conocimiento(self, titulo: str, contenido: str, categoria: str = "general", fuente: str = ""):
+        """Guardar o actualizar una entrada de conocimiento por título."""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO conocimiento (titulo, contenido, categoria, fuente, actualizado_en)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(titulo) DO UPDATE SET
+                    contenido = excluded.contenido,
+                    categoria = excluded.categoria,
+                    fuente = excluded.fuente,
+                    actualizado_en = CURRENT_TIMESTAMP
+            """, (titulo, contenido, categoria, fuente))
+            await db.commit()
+            print(f"[DB] 🧠 Conocimiento '{titulo}' guardado/actualizado")
+
+    async def obtener_conocimientos(self, categoria: str = None, limit: int = 50) -> list[dict]:
+        """Obtener entradas de conocimiento, opcionalmente por categoría."""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            if categoria:
+                async with db.execute(
+                    "SELECT id, titulo, contenido, categoria, fuente, actualizado_en FROM conocimiento WHERE categoria = ? ORDER BY actualizado_en DESC LIMIT ?",
+                    (categoria, limit)
+                ) as cursor:
+                    rows = await cursor.fetchall()
+            else:
+                async with db.execute(
+                    "SELECT id, titulo, contenido, categoria, fuente, actualizado_en FROM conocimiento ORDER BY actualizado_en DESC LIMIT ?",
+                    (limit,)
+                ) as cursor:
+                    rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def buscar_conocimientos(self, consulta: str, limit: int = 10) -> list[dict]:
+        """Buscar conocimiento por texto libre (título + contenido)."""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            patron = f"%{consulta}%"
+            async with db.execute(
+                "SELECT id, titulo, contenido, categoria, fuente, actualizado_en FROM conocimiento WHERE titulo LIKE ? OR contenido LIKE ? ORDER BY actualizado_en DESC LIMIT ?",
+                (patron, patron, limit)
+            ) as cursor:
+                rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def eliminar_conocimiento(self, titulo: str):
+        """Eliminar una entrada de conocimiento por título."""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM conocimiento WHERE titulo = ?", (titulo,))
+            await db.commit()
+            print(f"[DB] 🗑️ Conocimiento '{titulo}' eliminado")
+
+    async def contar_conocimientos(self) -> int:
+        """Total de entradas de conocimiento almacenadas."""
+        await self.init()
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT COUNT(*) FROM conocimiento") as cursor:
+                result = await cursor.fetchone()
+                return result[0] if result else 0
 
 
 # Instancia global

@@ -1,210 +1,104 @@
-# 🤖 HERMATRON - Agente Creativo Profesional
+# 🤖 HERMATRON v6.1 - Agente Creativo Profesional
 
-Un asistente de IA profesional con voz, memoria persistente y interfaz moderna, construido con **FastAPI** y **Edge TTS**.
+Un asistente de IA profesional con voz, memoria persistente, **video 1080p de 8 a 15 segundos** y **agente interno Qwen 3 gratis**, construido con **FastAPI**.
 
 ## ✨ Características
 
-- 🎯 **Chat inteligente** con Groq (Llama 3.1)
-- 🗣️ **Voz neuronal** con Edge TTS (voces en español)
+- 🎯 **Chat inteligente** con Groq + **agente interno Qwen 3** (gratis: Ollama local u OpenRouter `:free`) + OpenRouter como respaldo
+- 🗣️ **Voz neuronal** con Edge TTS (gratis) y ElevenLabs (premium)
+- 🎬 **Video 1080p Full HD de 8 a 15 segundos**: pipeline "Director de Cine" (guion → escenas → imágenes con consistencia de personajes → voz → subtítulos → ensamblado FFmpeg), con clips de movimiento real vía fal.ai (WAN 2.2 / LTX) en 1080p
+- 🖼️ **Imágenes** con Gemini Nano Banana y Pollinations
+- 💻 **Acceso al PC**: ejecuta Python, comandos, mueve archivos y consulta HTTP desde el chat
+- 👁️ **Visión multimodal** (Llama 4 Scout)
 - 💾 **Memoria persistente** con SQLite
-- 🎨 **Interfaz moderna** estilo dark mode
-- ⚡ **Arquitectura profesional** asíncrona
-- 🔧 **Fácil configuración** con variables de entorno
+- 👥 **Multi-agentes creativos**: Guionista, Casting, Inspector de Arte, LipSync, Calidad
 
 ## 📁 Estructura del Proyecto
 
 ```
-hermatron_agent/
-├── app/
-│   ├── __init__.py
-│   ├── main.py          # Aplicación FastAPI
-│   ├── config.py        # Configuración
-│   ├── memoria.py       # Módulo SQLite
-│   └── voz.py           # Módulo TTS
-├── static/
-│   ├── styles.css       # Estilos
-│   └── app.js           # JavaScript
-├── templates/
-│   └── index.html       # Frontend
-├── audio/               # Archivos de audio generados
-├── .env                 # Variables de entorno (NO committear)
-├── .env.example         # Ejemplo de variables
-├── requirements.txt     # Dependencias
+HERMATRON/
+├── app/                  # Backend FastAPI
+│   ├── main.py           # Aplicación y endpoints
+│   ├── config.py         # Configuración (.env)
+│   ├── video.py          # Motor de video (Director de Cine)
+│   ├── video_manager.py  # Tareas de producción
+│   ├── memoria.py        # SQLite
+│   ├── voz.py            # TTS
+│   ├── agents/           # Multi-agentes creativos
+│   └── busqueda.py       # Búsqueda web
+├── templates/            # Frontend (landing, chat, estudio de video)
+├── static/               # CSS, JS, personajes, escenografías
+├── videos/               # Videos y proyectos generados
+├── audio/                # Audios generados
+├── scripts/              # Utilidades y pruebas (scratch/ incluido)
+├── docs/                 # Documentación y notas
+├── utils/                # Helpers (ffmpeg)
+├── .env                  # Variables de entorno (NO committear)
+├── requirements.txt
 └── README.md
 ```
 
 ## 🚀 Instalación
 
-### 1. Clonar o descargar el proyecto
-
-```bash
-cd hermatron_agent
-```
-
-### 2. Crear entorno virtual (recomendado)
-
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# Linux/Mac
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Instalar dependencias
+### 1. Instalar dependencias
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configurar API Key de Groq
-
-1. Ve a https://console.groq.com
-2. Crea una cuenta y genera una API Key
-3. Copia la API Key en el archivo `.env`:
+### 2. (Opcional pero recomendado) Activar el agente Qwen 3 local gratis
 
 ```bash
-GROQ_API_KEY=tu_api_key_aqui
+# Instala Ollama y baja el modelo Qwen 3 (100% gratis, local)
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen3:8b
 ```
 
-### 5. Ejecutar el servidor
+> Sin Ollama, HERMATRON usa Groq (gratis con límites). Para usar Qwen 3 por nube gratis, pon en `.env`: `QWEN3_BASE_URL=https://openrouter.ai/api/v1` y `QWEN3_MODEL=qwen/qwen3-235b-a22b-instruct:free`.
+
+### 3. Configurar `.env`
+
+Copia las claves en `.env` (ver `.env.example`): `GROQ_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `FAL_KEY`, etc.
+
+### 4. Ejecutar el servidor
 
 ```bash
-# Desde la raíz del proyecto
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 5002
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 5001
 ```
 
-O simplemente:
+O en Windows: doble clic en `iniciar.bat`.
+
+### 5. Abrir en el navegador
+
+Ve a: **http://localhost:5001**
+
+## ⚙️ Configuración clave del `.env`
 
 ```bash
-python -m app.main
+# Proveedor LLM: "groq" | "qwen3" | "openrouter"
+LLM_PROVIDER=groq
+
+# Agente interno Qwen 3 (gratis)
+QWEN3_ENABLED=True
+QWEN3_BASE_URL=http://localhost:11434/v1
+QWEN3_MODEL=qwen3:8b
+
+# Duración objetivo del video (segundos)
+VIDEO_MIN_DURATION=8
+VIDEO_MAX_DURATION=15
 ```
 
-### 6. Abrir en el navegador
-
-Ve a: **http://localhost:5002**
-
-## 📖 Uso
-
-### Chat básico
-
-1. Escribe tu mensaje en el input
-2. Presiona `Enter` para enviar
-3. HERMATRON responderá con su personalidad única
-
-### Audio
-
-- El audio se genera automáticamente con cada respuesta
-- Usa el botón 🔊 para activar/desactivar
-- Se reproduce automáticamente al recibir la respuesta
-
-### Memoria
-
-- Todas las conversaciones se guardan en SQLite
-- Usa el botón "Limpiar" para borrar el historial
-- La memoria persiste entre sesiones
-
-## ⚙️ Configuración
-
-El archivo `.env` contiene todas las configuraciones:
-
-```bash
-# API de Groq
-GROQ_API_KEY=tu_api_key_aqui
-
-# Servidor
-PORT=5002
-HOST=0.0.0.0
-DEBUG=True
-
-# Modelo (opcional)
-GROQ_MODEL=llama-3.1-70b-versatile
-
-# Voz TTS (opcional)
-TTS_VOICE=es-MX-JorgeNeural
-```
-
-### Voces disponibles
-
-| Voz | País | Género |
-|-----|------|--------|
-| `es-ES-AlvaroNeural` | España | Masculino |
-| `es-ES-ElviraNeural` | España | Femenino |
-| `es-MX-DaliaNeural` | México | Femenino |
-| `es-CO-SalomeNeural` | Colombia | Femenino 🇨🇴 |
-| `es-CO-GonzaloNeural` | Colombia | Masculino 🇨🇴 |
-| `es-AR-ElenaNeural` | Argentina | Femenino |
-
-## 🔌 API Endpoints
+## 🔌 API Endpoints principales
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/` | GET | Interfaz web |
-| `/api/chat` | POST | Enviar mensaje |
-| `/api/audio/ultimo` | GET | Obtener último audio |
-| `/api/memoria` | GET | Ver estado de memoria |
-| `/api/limpiar` | POST | Limpiar historial |
-| `/api/health` | GET | Health check |
-| `/api/voces` | GET | Listar voces TTS |
-
-## 🛠️ Desarrollo
-
-### Agregar nuevas características
-
-1. **Nuevo endpoint**: Agregar en `app/main.py`
-2. **Nueva voz**: Modificar `app/voz.py`
-3. **Estilos**: Editar `static/styles.css`
-4. **Frontend**: Modificar `templates/index.html`
-
-### Debug mode
-
-Con `DEBUG=True` en `.env`, el servidor se recarga automáticamente.
-
-## 📝 Ejemplo de uso con Python
-
-```python
-import httpx
-
-async def chatear():
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            'http://localhost:5000/api/chat',
-            json={'prompt': '¡Hola HERMATRON! ¿Cómo estás?', 'generar_audio': True}
-        )
-        data = response.json()
-        print(data['respuesta'])
-```
-
-## 🐛 Solución de problemas
-
-### "API key no configurada"
-
-- Verifica que el archivo `.env` exista
-- Asegúrate de que `GROQ_API_KEY` tenga un valor válido
-- Reinicia el servidor
-
-### "Error generando audio"
-
-- Verifica tu conexión a internet (Edge TTS requiere conexión)
-- Prueba cambiando la voz en `.env`
-
-### Puerto ya en uso
-
-- Cambia el `PORT` en `.env`
-- O mata el proceso: `netstat -ano | findstr :5000`
-
-## 📄 Licencia
-
-MIT License - Siéntete libre de usar y modificar.
-
-## 🤝 Contribuciones
-
-¡Las contribuciones son bienvenidas! Abre un issue o PR.
+| `/` | GET | Landing |
+| `/chat` | GET | Chat multiusos |
+| `/videos` | GET | Estudio de video |
+| `/api/chat` | POST | Enviar mensaje (LLM + herramientas) |
+| `/api/video/pre-produccion` | POST | Crear video 1080p (8-15s) |
+| `/api/health` | GET | Estado del sistema |
 
 ---
 
-**Hecho con ❤️ por tu pana desarrollador**
-
-*HERMATRON © 2026*
+**Hecho con ❤️ por tu pana desarrollador · HERMATRON v6.1 © 2026**

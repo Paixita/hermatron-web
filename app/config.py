@@ -25,8 +25,20 @@ FAL_KEY = os.getenv("FAL_KEY", "")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-# Indica qué proveedor usa el chat principal: "groq" o "openrouter"
+# Indica qué proveedor usa el chat principal: "groq" | "openrouter" | "qwen3"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
+
+# ── Agente interno Qwen 3 (GRATIS: Ollama local / OpenRouter :free) ────────────
+# Qwen 3 es un agente open-source con tool calling nativo (puede ejecutar
+# Python, comandos del PC, HTTP y búsqueda web a través de las herramientas).
+QWEN3_ENABLED = os.getenv("QWEN3_ENABLED", "True").lower() == "true"
+QWEN3_API_KEY = os.getenv("QWEN3_API_KEY", "")
+# Por defecto apunta a Ollama local (100%% gratis, sin nube):
+#   ollama run qwen3:8b
+# Para usar la nube (gratis con límites diarios) cambia a:
+#   https://openrouter.ai/api/v1  y  QWEN3_MODEL=qwen/qwen3-235b-a22b-instruct:free
+QWEN3_BASE_URL = os.getenv("QWEN3_BASE_URL", "http://localhost:11434/v1")
+QWEN3_MODEL = os.getenv("QWEN3_MODEL", "qwen3:8b")
 
 # Modelos de visión disponibles en Groq
 # NOTA: Los modelos llama-3.2-*-vision fueron DECOMISIONADOS por Groq.
@@ -83,6 +95,23 @@ TRANSLATION_CACHE_PATH = BASE_DIR / "videos" / "translation_cache.json"
 # Opciones adicionales
 VIDEO_FPS = int(os.getenv("VIDEO_FPS", "30"))
 
+# ── Duración objetivo del video (segundos) ────────────────────────────────────
+# HERMATRON asegura que cada video dure entre estos límites:
+#  - Si la narración es más corta, se añade silencio final (apad).
+#  - Los clips de fal.ai se solicitan en 1080p.
+VIDEO_MIN_DURATION = int(os.getenv("VIDEO_MIN_DURATION", "5"))
+VIDEO_MAX_DURATION = int(os.getenv("VIDEO_MAX_DURATION", "300"))
+
 # Seguridad y Permisos
 ALLOW_SYSTEM_COMMANDS = os.getenv("ALLOW_SYSTEM_COMMANDS", "False").lower() == "true"
 HERMATRON_ADMIN_MODE = os.getenv("HERMATRON_ADMIN_MODE", "False").lower() == "true"
+
+# ── Servicios Avanzados del Agente (v6.2, 100% gratis) ────────────────────────
+# Acceso al sistema de archivos del PC (listar, leer, escribir, crear, copiar,
+# mover, eliminar y buscar carpetas/archivos). True por defecto porque ya
+# existe ALLOW_SYSTEM_COMMANDS; poner en False para desactivar solo esto.
+ALLOW_FILE_ACCESS = os.getenv("ALLOW_FILE_ACCESS", "True").lower() == "true"
+# Token de GitHub OPCIONAL (gratis, Settings > Developer settings > Tokens).
+# Sin token funciona con la API pública (límites: 10 búsquedas/min, 60 req/h).
+# Con token se desbloquean búsqueda de código y límites más altos.
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
