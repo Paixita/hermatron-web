@@ -70,6 +70,8 @@ class VideoRequest(BaseModel):
     estilo: Optional[str] = "cinematic"
     formato: Optional[str] = "16:9"
     bgm_path: Optional[str] = None
+    # Modo de video: "auto" | "presentacion" | "gratis" | "fal"
+    modo_video: Optional[str] = "auto"
 
 class ProbarVozRequest(BaseModel):
     voz: str
@@ -976,13 +978,18 @@ async def chat(chat_request: ChatRequest):
             try:
                 timestamp = int(time.time())
                 nombre_archivo = f"respuesta_{timestamp}.mp3"
-                await generador_voz.generar(
+                archivo_audio = await generador_voz.generar(
                     respuesta,
                     nombre_archivo,
                     calidad=chat_request.calidad_audio or "edge-tts",
                     voz_id=chat_request.voz_id,
                 )
-                audio_gen, audio_id = True, nombre_archivo
+                # Solo reportar audio si el archivo realmente existe:
+                # generar() devuelve False cuando TODOS los motores de voz fallan.
+                if archivo_audio and Path(str(archivo_audio)).exists():
+                    audio_gen, audio_id = True, Path(str(archivo_audio)).name
+                else:
+                    print("❌ [AUDIO] Ningún motor de voz disponible — respuesta sin audio")
             except Exception as e: print(f"❌ [AUDIO ERROR]: {e}")
 
         return ChatResponse(respuesta=respuesta, audio_generado=audio_gen, audio_id=audio_id)
@@ -1049,13 +1056,14 @@ async def chat_con_imagenes(
             print(f"⚠️ Error visión: {error_msg[:100]}")
             
             # Si falla, dar mensaje de error claro
-            if "does not support image" in error_msg or "not support vision" in error_msg:
-                respuesta = """El modelo de visión actual no está disponible en tu cuenta de Groq.
+            if ("does not support image" in error_msg or "not support vision" in error_msg
+                    or "must be a string" in error_msg or "model_not_found" in error_msg):
+                respuesta = """El modelo de visión actual no está disponible o tu clave no tiene acceso a él.
 
 Para usar análisis de imágenes, necesitas:
-1. Verificar que tu cuenta de Groq tenga acceso al modelo **Llama 4 Scout**
+1. Verificar que tu cuenta de Groq tenga acceso a un modelo de visión (ej: Llama 4 Scout o similar)
 2. Ir a https://console.groq.com/settings/permissions
-3. Habilitar el modelo de visión
+3. Habilitar el modelo de visión correspondiente
 
 Mientras tanto, puedo ayudarte si me describes la imagen."""
             else:
@@ -1408,7 +1416,7 @@ async def limpiar_cache():
 # Cola Global para evitar colapsos por falta de memoria (Solo 1 render a la vez)
 video_semaphore = asyncio.Semaphore(1)
 
-async def _proceso_crear_video(proyecto_id: str, tema: str, prompt: str, voz: str):
+async def _proceso_crear_video(proyecto_id: str, tema: str, prompt: str, voz: str, modo_video: str = "auto"):
     try:
         # Notificar que está en cola si hay alguien más renderizando
         if video_semaphore.locked():
@@ -1429,6 +1437,7 @@ async def _proceso_crear_video(proyecto_id: str, tema: str, prompt: str, voz: st
                 proj_obj = generador_video._cargar_proyecto(proyecto_id)
                 if proj_obj:
                     proj_obj.voz = voz
+                    proj_obj.modo_video = modo_video or "auto"
                     generador_video._guardar_proyecto(proj_obj)
             
             # Aprobar todas por defecto para el flujo automatizado
@@ -1464,11 +1473,12 @@ async def crear_video_endpoint(req: VideoRequest, background_tasks: BackgroundTa
         prompt=req.prompt,
         prompt_original=req.prompt,
         estado=VideoEstado.ANALIZANDO,
-        creado_en=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        creado_en=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        modo_video=req.modo_video or "auto"
     )
     generador_video._guardar_proyecto(proyecto)
     
-    background_tasks.add_task(_proceso_crear_video, proyecto_id, tema_con_formato, req.prompt + f" Estilo: {req.estilo}", req.voz)
+    background_tasks.add_task(_proceso_crear_video, proyecto_id, tema_con_formato, req.prompt + f" Estilo: {req.estilo}", req.voz, req.modo_video or "auto")
     return {"video_id": proyecto_id, "estado": "analizando"}
 @app.post("/api/video/pre-produccion")
 async def pre_produccion_endpoint(req: VideoRequest, background_tasks: BackgroundTasks):
@@ -1481,13 +1491,52 @@ async def pre_produccion_endpoint(req: VideoRequest, background_tasks: Backgroun
         "tema": tema_con_formato,
         "prompt": req.prompt + f" Estilo: {req.estilo}",
         "voz": req.voz,
-        "bgm_path": req.bgm_path
+        "bgm_path": req.bgm_path,
+        "modo_video": req.modo_video or "auto"
     }
     
     # Lanzar tarea en background (GRATIS)
     background_tasks.add_task(pre_producir_video_task, payload)
     
     return {"video_id": proyecto_id, "estado": "analizando"}
+
+class ReescribirRequest(BaseModel):
+    proyecto_id: str
+    cambios: str = ""
+
+@app.post("/api/video/reescribir")
+async def reescribir_video_endpoint(req: ReescribirRequest, background_tasks: BackgroundTasks):
+    """Crea una NUEVA versión del video aplicando los cambios que pide el usuario.
+    Reutiliza tema, prompt original, voz, música y modo del proyecto de origen."""
+    try:
+        proyecto = generador_video.obtener_proyecto(req.proyecto_id)
+        if not proyecto:
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        if not (proyecto.get("prompt_original") or proyecto.get("prompt") or proyecto.get("tema")):
+            raise HTTPException(status_code=400, detail="Este proyecto no tiene un prompt editable")
+
+        prompt_base = proyecto.get("prompt_original") or proyecto.get("prompt") or ""
+        prompt_base = str(prompt_base).replace(" Estilo: cinematic", "").strip()
+        cambios = (req.cambios or "").strip()
+        prompt_nuevo = prompt_base
+        if cambios:
+            prompt_nuevo = f"{prompt_base}\n\nCAMBIOS SOLICITADOS POR EL USUARIO: {cambios}"
+
+        nuevo_id = f"proyecto_{int(time.time())}"
+        payload = {
+            "proyecto_id": nuevo_id,
+            "tema": proyecto.get("tema", ""),
+            "prompt": prompt_nuevo,
+            "voz": proyecto.get("voz") or "es-CO-GonzaloNeural",
+            "bgm_path": proyecto.get("bgm_path"),
+            "modo_video": proyecto.get("modo_video") or "auto",
+        }
+        background_tasks.add_task(pre_producir_video_task, payload)
+        return {"video_id": nuevo_id, "estado": "analizando", "reescrito_de": req.proyecto_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 class RegenerarImagenRequest(BaseModel):
     proyecto_id: str
@@ -1672,18 +1721,106 @@ async def exportar_pc_endpoint(req: ExportarPCRequest):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- Fases del pipeline para el temporizador visual (estilo creadores de video) ---
+ORDEN_FASES = ["leyendo", "analisis", "escenas", "imagenes", "voz", "subtitulos", "ensamblado", "listo"]
+
+
+def _fase_actual_id(estado: str, pct: int, mensaje: str) -> str:
+    estado = (estado or "").lower()
+    m = (mensaje or "").lower()
+    pct = pct or 0
+    if estado == "completado":
+        return "listo"
+    if estado == "error":
+        return "error"
+    # El tramo final (92-100%) corresponde a subtítulos + ensamblado con FFmpeg,
+    # aunque el estado interno siga siendo generando_voz / en_review.
+    if pct >= 92:
+        if any(k in m for k in ("subtitul", "whisper", "srt", "transcrib")):
+            return "subtitulos"
+        return "ensamblado"
+    if estado == "en_cola":
+        return "leyendo"
+    if estado == "analizando":
+        return "leyendo" if pct < 10 else "analisis"
+    if estado == "disenando":
+        return "escenas"
+    if estado == "generando_imagenes":
+        return "imagenes"
+    if estado == "generando_voz":
+        return "voz"
+    if estado == "en_review":
+        # Tras diseñar (60) o tras imágenes (80) el motor pasa por en_review
+        return "escenas" if pct <= 70 else "imagenes"
+    # Respaldo por porcentaje
+    if pct < 10:
+        return "leyendo"
+    if pct < 30:
+        return "analisis"
+    if pct < 60:
+        return "escenas"
+    if pct < 85:
+        return "imagenes"
+    if pct < 92:
+        return "voz"
+    return "ensamblado"
+
+
+def _detalle_fase(estado: str, pct: int, mensaje: str) -> str:
+    """Extrae un sub-paso legible, p. ej. 'Imagen 3 de 5'."""
+    import re
+    m = (mensaje or "")
+    # Patrón tipo "3 de 5" / "X de Y" presente en los mensajes del motor
+    pat = re.search(r"(\d+)\s*de\s*(\d+)", m)
+    if pat:
+        a, b = pat.group(1), pat.group(2)
+        bajo = m.lower()
+        if "imagen" in bajo or "escena" in bajo:
+            return f"{a} de {b}"
+    return ""
+
+
+def _calcular_fases_pipeline(estado: str, pct: int, mensaje: str) -> dict:
+    actual = _fase_actual_id(estado, pct, mensaje)
+    fases = []
+    for f in ORDEN_FASES:
+        if actual == "error":
+            est = "pendiente"
+        elif f == "listo":
+            est = "hecha" if estado == "completado" else "pendiente"
+        else:
+            idx_act = ORDEN_FASES.index(actual) if actual in ORDEN_FASES else -1
+            idx_f = ORDEN_FASES.index(f)
+            if idx_act == -1:
+                est = "pendiente"
+            elif idx_f < idx_act:
+                est = "hecha"
+            elif idx_f == idx_act:
+                est = "activa"
+            else:
+                est = "pendiente"
+        fases.append({"id": f, "estado": est})
+    return {"fase_actual": actual, "fases": fases}
+
+
 @app.get("/api/video/progreso/{video_id}")
 async def progreso_video(video_id: str):
     progreso = generador_video.obtener_progreso(video_id)
     proyecto = generador_video.obtener_proyecto(video_id)
     if not proyecto:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+    estado = proyecto.get("estado", "desconocido")
+    mensaje = proyecto.get("mensaje_estado", "Procesando...")
+    fases_data = _calcular_fases_pipeline(estado, progreso, mensaje)
     return {
-        "video_id": video_id, 
-        "progreso": progreso, 
-        "estado": proyecto.get("estado", "desconocido"),
-        "mensaje_estado": proyecto.get("mensaje_estado", "Procesando..."),
-        "error": proyecto.get("error")
+        "video_id": video_id,
+        "progreso": progreso,
+        "estado": estado,
+        "mensaje_estado": mensaje,
+        "error": proyecto.get("error"),
+        "fase_actual": fases_data["fase_actual"],
+        "fases": fases_data["fases"],
+        "detalle_fase": _detalle_fase(estado, progreso, mensaje),
     }
 
 @app.get("/api/video/estado/{video_id}")

@@ -124,6 +124,15 @@ class GeneradorVoz:
             hash_audio = self._obtener_hash_audio(texto_limpio, str(voz_actual), calidad)
             audio_en_cache = self._buscar_en_cache(hash_audio)
             if audio_en_cache:
+                # Si el llamador pidió un nombre concreto, asegurar que ese archivo exista
+                # (copiando desde caché). Así audio_id nunca apunta a un archivo inexistente.
+                if nombre_archivo:
+                    import shutil
+                    ruta_pedida = self.output_dir / nombre_archivo
+                    if not ruta_pedida.exists() or ruta_pedida.stat().st_size == 0:
+                        shutil.copy2(audio_en_cache, ruta_pedida)
+                    print(f"[CACHÉ] ✅ Copiado desde caché a {ruta_pedida.name}")
+                    return str(ruta_pedida)
                 return str(audio_en_cache)
             
             print(f"[TTS] Generando (calidad: {calidad}, voz: {self.voz}): '{texto_limpio[:50]}...'")
@@ -365,10 +374,18 @@ class GeneradorVoz:
             {"id": "es-MX-JorgeNeural", "nombre": "🎙️ Jorge (México) - Cálido", "tipo": "masculina"},
             {"id": "es-US-AlonsoNeural", "nombre": "🎙️ Alonso (USA) - Neutral", "tipo": "masculina"},
             {"id": "es-AR-TomasNeural", "nombre": "🎙️ Tomás (Argentina) - Energético", "tipo": "masculina"},
+            {"id": "es-ES-CarlosNeural", "nombre": "🎙️ Carlos (España) - Alternativo", "tipo": "masculina"},
+            {"id": "es-MX-DiegoNeural", "nombre": "🎙️ Diego (México) - Alternativo", "tipo": "masculina"},
         ]
         voces_femeninas = [
             {"id": "es-ES-LuciaNeural", "nombre": "👩 Lucía (España) - Clara", "tipo": "femenina"},
             {"id": "es-ES-ConchitaNeural", "nombre": "👩 Conchita (España) - Cálida", "tipo": "femenina"},
+            {"id": "es-CO-SalomeNeural", "nombre": "👩 Salomé (Colombia) ⭐ RECOMENDADA", "tipo": "femenina"},
+            {"id": "es-MX-DaliaNeural", "nombre": "👩 Dalia (México) - Joven", "tipo": "femenina"},
+            {"id": "es-MX-LupeNeural", "nombre": "👩 Lupe (México) - Adulta", "tipo": "femenina"},
+            {"id": "es-ES-ElviraNeural", "nombre": "👩 Elvira (España) - Adulta", "tipo": "femenina"},
+            {"id": "es-US-PalomaNeural", "nombre": "👩 Paloma (EEUU) - Joven", "tipo": "femenina"},
+            {"id": "es-AR-ElenaNeural", "nombre": "👩 Elena (Argentina) - Clara", "tipo": "femenina"},
         ]
         voces_premium = [
             {"id": "Adam", "nombre": "💎 Adam (ElevenLabs) - PREMIUM", "tipo": "premium"},

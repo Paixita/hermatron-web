@@ -14,7 +14,7 @@ load_dotenv(BASE_DIR / ".env")
 
 # Configuración de Groq
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GEMINI_SAFETY_MODE = os.getenv("GEMINI_SAFETY_MODE", "True").lower() == "true"
 

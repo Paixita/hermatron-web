@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
     <!-- CACHE BUSTER: v21 -->
-    <link rel="stylesheet" href="/static/styles.css?v=21">
+    <link rel="stylesheet" href="/static/styles.css?v=22">
     <link rel="stylesheet" href="/static/video-studio.css?v=21">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
@@ -60,6 +60,36 @@
                                 <input type="radio" name="ratio" value="9:16" onchange="actualizarRatioPreview()">
                                 <div class="ratio-box ratio-9-16">
                                     <span>9:16 Shorts/Reels</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>🎥 Modo de Video</label>
+                        <div class="modo-video-selector" style="display:flex; flex-direction:column; gap:6px;">
+                            <label class="ratio-option">
+                                <input type="radio" name="modoVideo" value="auto" checked>
+                                <div class="ratio-box" style="padding:8px 12px;">
+                                    <span>⚙️ Auto (usa lo mejor disponible: fal.ai → HuggingFace → Ken Burns)</span>
+                                </div>
+                            </label>
+                            <label class="ratio-option">
+                                <input type="radio" name="modoVideo" value="presentacion">
+                                <div class="ratio-box" style="padding:8px 12px;">
+                                    <span>🎞️ Presentación con movimiento de cámara (GRATIS)</span>
+                                </div>
+                            </label>
+                            <label class="ratio-option">
+                                <input type="radio" name="modoVideo" value="gratis">
+                                <div class="ratio-box" style="padding:8px 12px;">
+                                    <span>🤖 IA Gratis (Mochi HuggingFace, sin fal.ai)</span>
+                                </div>
+                            </label>
+                            <label class="ratio-option">
+                                <input type="radio" name="modoVideo" value="fal">
+                                <div class="ratio-box" style="padding:8px 12px;">
+                                    <span>💎 Movimiento IA Premium (fal.ai WAN/LTX)</span>
                                 </div>
                             </label>
                         </div>
@@ -173,10 +203,17 @@
                         <div class="spinner"></div>
                         <div class="progress-info">
                             <p id="progresoEstado">🧠 Analizando tema...</p>
+                            <!-- Timeline de fases del pipeline (CapCut-style) -->
+                            <div id="progresoFases" class="progreso-fases" style="margin: 14px 0 6px 0;"></div>
                             <div class="progress-bar-wrap">
                                 <div id="progresoFill" class="progress-bar-fill"></div>
                             </div>
-                            <span id="progresoPorcentaje">0%</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                                <span id="progresoPorcentaje">0%</span>
+                                <span id="progresoTimer" style="font-size:0.8rem; color:var(--texto-secundario); font-family:monospace;">⏱️ 0:00</span>
+                            </div>
+                            <!-- Detalle de sub-fase (ej: Imagen 2 de 5) -->
+                            <div id="progresoDetalle" style="margin-top:6px; font-size:0.85rem; color:#9db8ff;"></div>
                         </div>
                     </div>
                 </div>
@@ -209,6 +246,7 @@
                                 </select>
                                 <button class="btn btn-primary btn-sm" onclick="descargarVideoActual()">⬇️ Web</button>
                                 <button class="btn btn-success btn-sm" onclick="guardarEnPC()">💾 PC</button>
+                                <button id="btnReescribirIA" class="btn btn-secondary btn-sm" style="background:#6f42c1; display:none;" onclick="abrirModalReescribir()" title="Regenerar el video pidiéndole cambios a la IA">✏️ Reescribir con IA</button>
                             </div>
                         </div>
                     </div>
@@ -386,9 +424,20 @@
         </div>
     </div>
 
+    <!-- Modal Reescribir Video con IA -->
+    <div id="modalReescribir" class="studio-modal" style="display:none; position: fixed; z-index: 10002; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center;">
+        <div class="modal-content" style="background-color: var(--fondo-secundario); padding: 25px; border-radius: 12px; width: 90%; max-width: 480px; border: 1px solid var(--borde); position: relative; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+            <span class="modal-close" onclick="cerrarModalReescribir()" style="position: absolute; right: 15px; top: 10px; font-size: 1.8rem; color: var(--texto-secundario); cursor: pointer; transition: color 0.2s;">&times;</span>
+            <h3 style="margin-bottom: 10px; font-size: 1.25rem; display: flex; align-items: center; gap: 8px;">✏️ Reescribir Video con IA</h3>
+            <p style="font-size: 0.85rem; color: var(--texto-secundario); margin-bottom: 15px;">Dile a la IA qué quieres cambiar o mejorar. Se generará una <strong>nueva versión</strong> y la anterior se conserva.</p>
+            <textarea id="reescribirCambios" rows="5" placeholder="Ej: cambia el tono a más motivador, haz la narración más pausada, agrega una reflexión final, que las escenas duren más..." class="textarea-form" style="width: 100%; box-sizing: border-box; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 10px 12px; border-radius: 8px; resize: vertical; margin-bottom: 15px;"></textarea>
+            <button type="button" class="btn btn-primary btn-block" style="width: 100%; padding: 11px; font-weight: 700; background: linear-gradient(135deg, #6f42c1, #8b5cf6); border: none; border-radius: 8px; color: white; cursor: pointer;" onclick="confirmarReescribirVideo()">🚀 Reescribir Ahora</button>
+        </div>
+    </div>
+
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <script src="/static/video-studio.js?v=21"></script>
+    <script src="/static/video-studio.js?v=22"></script>
 </body>
 </html>

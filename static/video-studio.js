@@ -308,6 +308,93 @@ function actualizarRatioPreview() {
 }
 
 /* === PIPELINE: Analizar → Diseñar → Producir === */
+/* === PIPELINE: Analizar → Diseñar → Producir (con fases visibles) === */
+const FASES_PIPELINE = [
+    { id: 'leyendo',    icono: '📖', nombre: 'Leyendo tu idea' },
+    { id: 'analisis',   icono: '🧠', nombre: 'Analizando el tema' },
+    { id: 'escenas',    icono: '✍️', nombre: 'Diseñando escenas' },
+    { id: 'imagenes',   icono: '🖼️', nombre: 'Generando imágenes' },
+    { id: 'voz',        icono: '🎙️', nombre: 'Creando la narración' },
+    { id: 'subtitulos', icono: '💬', nombre: 'Sincronizando subtítulos' },
+    { id: 'ensamblado', icono: '🎞️', nombre: 'Ensamblando el video' },
+    { id: 'listo',      icono: '✅', nombre: '¡Video listo!' }
+];
+
+let inicioProgresoMs = 0;
+let timerProgresoInt = null;
+let ultimoPctProgreso = 0;
+let fallosRedProgreso = 0;
+
+function iniciarTemporizadorProgreso() {
+    detenerTemporizadorProgreso();
+    inicioProgresoMs = Date.now();
+    const el = document.getElementById('progresoTimer');
+    if (el) el.textContent = '⏱️ 0:00';
+    timerProgresoInt = setInterval(() => {
+        const el = document.getElementById('progresoTimer');
+        if (!el) return;
+        const s = Math.floor((Date.now() - inicioProgresoMs) / 1000);
+        const mm = Math.floor(s / 60);
+        const ss = String(s % 60).padStart(2, '0');
+        el.textContent = `⏱️ ${mm}:${ss}`;
+    }, 1000);
+}
+
+function detenerTemporizadorProgreso() {
+    if (timerProgresoInt) { clearInterval(timerProgresoInt); timerProgresoInt = null; }
+}
+
+function renderFasesProgreso(progData) {
+    const cont = document.getElementById('progresoFases');
+    if (!cont) return;
+    const fases = (progData && progData.fases) || [];
+    const faseActual = (progData && progData.fase_actual) || '';
+    const completado = progData && progData.estado === 'completado';
+
+    cont.innerHTML = FASES_PIPELINE.map(f => {
+        let estado = 'pendiente';
+        if (fases.length) {
+            const fd = fases.find(x => x.id === f.id);
+            estado = fd ? fd.estado : 'pendiente';
+        } else if (completado) {
+            estado = 'hecha';
+        } else if (f.id === faseActual) {
+            estado = 'activa';
+        }
+        const cls = estado === 'hecha' ? 'fase-hecha' : estado === 'activa' ? 'fase-activa' : 'fase-pendiente';
+        const dot = estado === 'hecha' ? '<span class="fase-dot fase-dot-ok">✓</span>'
+                  : estado === 'activa' ? '<span class="fase-dot fase-dot-run spinner-small"></span>'
+                  : '<span class="fase-dot"></span>';
+        return `<div class="fase-item ${cls}">${dot}<span class="fase-icono">${f.icono}</span><span class="fase-nombre">${f.nombre}</span></div>`;
+    }).join('');
+}
+
+function actualizarBarraProgreso(pct) {
+    const progresoFill = document.getElementById('progresoFill');
+    const progresoPorcentaje = document.getElementById('progresoPorcentaje');
+    if (progresoFill) progresoFill.style.width = pct + '%';
+    if (progresoPorcentaje) progresoPorcentaje.textContent = pct + '%';
+    if (progresoFill) {
+        if (pct >= 100) progresoFill.style.background = '#2ea043';
+        else if (pct >= 90) progresoFill.style.background = '#17a2b8';
+        else if (pct >= 80) progresoFill.style.background = '#fd7e14';
+        else progresoFill.style.background = '#6f42c1';
+    }
+}
+
+function mostrarDetalleProgreso(detalle) {
+    const el = document.getElementById('progresoDetalle');
+    if (!el) return;
+    el.textContent = detalle || '';
+    el.style.display = detalle ? 'block' : 'none';
+}
+
+function estadoProgresoHTML(msg) {
+    const el = document.getElementById('progresoEstado');
+    if (el) el.innerHTML = msg;
+}
+
+/* Crea el video desde el formulario del Estudio */
 async function crearVideoDesdeStudio() {
     console.log("Botón Crear Video presionado");
     const temaInput = document.getElementById('videoTema');
@@ -315,7 +402,7 @@ async function crearVideoDesdeStudio() {
     const tema = temaInput ? temaInput.value.trim() : '';
     const prompt = promptInput ? promptInput.value.trim() : '';
     const voz = document.getElementById('vozSeleccionada')?.value || 'es-CO-GonzaloNeural';
-    const estilo = 'cinematic'; 
+    const estilo = 'cinematic';
 
     if (!tema || !prompt) {
         showToast('Completa el TEMA y la DESCRIPCIÓN', 'warning');
@@ -325,9 +412,6 @@ async function crearVideoDesdeStudio() {
     }
 
     const progresoDiv = document.getElementById('studioProgreso');
-    const progresoFill = document.getElementById('progresoFill');
-    const progresoPorcentaje = document.getElementById('progresoPorcentaje');
-    const progresoEstado = document.getElementById('progresoEstado');
     const btnCrear = document.querySelector('.btn-crear-video-studio');
 
     if (pollingInterval) {
@@ -338,108 +422,207 @@ async function crearVideoDesdeStudio() {
     progresoDiv.style.display = 'block';
     btnCrear.disabled = true;
     btnCrear.textContent = '🎬 Generando Video...';
-    progresoEstado.innerHTML = `🚀 Iniciando proceso...`;
-    progresoFill.style.width = '5%';
-    progresoPorcentaje.textContent = '5%';
-    progresoFill.style.background = '#007BFF';
+    estadoProgresoHTML('🚀 Enviando tu idea al Director de Cine...');
+    mostrarDetalleProgreso('');
+    renderFasesProgreso(null);
+    actualizarBarraProgreso(5);
+
+    const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
+    const bgmPath = document.getElementById('bgmPathSelected')?.value || null;
+
+    // Reintentos automáticos ante "Failed to fetch" (servidor reiniciándose)
+    let respuestaOk = null;
+    for (let intento = 1; intento <= 5; intento++) {
+        try {
+            const response = await fetch('/api/video/pre-produccion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tema: tema,
+                    prompt: prompt,
+                    voz: voz,
+                    estilo: estilo,
+                    formato: ratio,
+                    bgm_path: bgmPath,
+                    modo_video: document.querySelector('input[name="modoVideo"]:checked')?.value || 'auto'
+                })
+            });
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || `Error: ${response.status}`);
+            }
+            respuestaOk = await response.json();
+            break;
+        } catch (error) {
+            fallosRedProgreso = intento;
+            if (intento >= 5) {
+                console.error('Error iniciar pipeline:', error);
+                showToast(`❌ ${error.message}`, 'error');
+                estadoProgresoHTML(`❌ <strong>No se pudo conectar con el servidor.</strong><br><small>Reinícialo si se apagó y vuelve a intentar.</small>`);
+                actualizarBarraProgreso(0);
+                btnCrear.disabled = false;
+                btnCrear.textContent = '🎬 Crear Video Profesional';
+                return;
+            }
+            estadoProgresoHTML(`🔄 Intentando reconectar con el servidor... (${intento}/5)`);
+            await new Promise(r => setTimeout(r, 2500));
+        }
+    }
+
+    proyectoActual = respuestaOk.video_id;
+    ultimoPctProgreso = 5;
+    fallosRedProgreso = 0;
+    seguirVideoProyecto(proyectoActual);
+}
+
+/* Seguimiento de progreso compartido (crear y reescribir) */
+async function seguirVideoProyecto(proyectoId) {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+    iniciarTemporizadorProgreso();
+
+    const progresoDiv = document.getElementById('studioProgreso');
+    const btnCrear = document.querySelector('.btn-crear-video-studio');
+
+    pollingInterval = setInterval(async () => {
+        try {
+            const progRes = await fetch(`/api/video/progreso/${proyectoId}`);
+            fallosRedProgreso = 0;
+            if (!progRes.ok) return;
+            const progData = await progRes.json();
+
+            let pct = progData.progreso || 0;
+            // La barra nunca retrocede (el motor reutiliza en_review en varios puntos)
+            if (pct < ultimoPctProgreso) pct = ultimoPctProgreso;
+            ultimoPctProgreso = pct;
+            if (progData.estado === 'completado') pct = 100;
+
+            actualizarBarraProgreso(pct);
+            renderFasesProgreso(progData);
+            mostrarDetalleProgreso(progData.detalle_fase || '');
+
+            if (progData.estado === 'completado' || pct >= 100) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                detenerTemporizadorProgreso();
+                actualizarBarraProgreso(100);
+                estadoProgresoHTML('✅ ¡Video Creado Exitosamente!');
+                renderFasesProgreso({ estado: 'completado' });
+                if (btnCrear) { btnCrear.disabled = false; btnCrear.textContent = '🎬 Crear Video Profesional'; }
+
+                setTimeout(async () => {
+                    progresoDiv.style.display = 'none';
+                    mostrarDetalleProgreso('');
+                    await cargarVideoPreview(proyectoId);
+                    await cargarGaleriaProyectos();
+                    renderStoryboard(proyectoId);
+                }, 1500);
+                return;
+            }
+
+            if (progData.estado === 'error') {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                detenerTemporizadorProgreso();
+                estadoProgresoHTML(`❌ <strong>Error:</strong> ${progData.error || 'Error en pre-producción'}`);
+                actualizarBarraProgreso(0);
+                if (btnCrear) { btnCrear.disabled = false; btnCrear.textContent = '🎬 Crear Video Profesional'; }
+                showToast('❌ El video no se pudo generar', 'error');
+                return;
+            }
+
+            // Mensajes de fase estilo CapCut (respaldo si el backend no manda mensaje)
+            if (progData.mensaje_estado) {
+                estadoProgresoHTML(progData.mensaje_estado);
+            } else {
+                const faseMap = {
+                    analizando: '🧠 <strong>Analizando tu idea...</strong>',
+                    disenando: '✍️ <strong>El Guionista está escribiendo las escenas...</strong>',
+                    generando_imagenes: '🖼️ <strong>Creando imágenes multimedia...</strong>',
+                    en_review: '🛡️ <strong>Revisando la composición cinematográfica...</strong>',
+                    generando_voz: '🎙️ <strong>Creando la voz superpuesta...</strong>',
+                    ensamblando: '🎞️ <strong>Ensamblando escenas, subtítulos y video...</strong>'
+                };
+                estadoProgresoHTML(faseMap[progData.estado] || '🎬 Procesando...');
+            }
+        } catch (err) {
+            console.error('Fallo de red en progreso:', err);
+            fallosRedProgreso++;
+            if (fallosRedProgreso >= 8) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                detenerTemporizadorProgreso();
+                estadoProgresoHTML(`❌ <strong>Se perdió la conexión con el servidor.</strong><br><small>El proceso pudo interrumpirse si HERMATRON se reinició. Pulsa crear de nuevo.</small>`);
+                actualizarBarraProgreso(0);
+                if (btnCrear) { btnCrear.disabled = false; btnCrear.textContent = '🎬 Crear Video Profesional'; }
+                return;
+            }
+            estadoProgresoHTML(`🔄 Reconectando con el servidor... (intento ${fallosRedProgreso}/8)`);
+        }
+    }, 2000);
+}
+
+/* ===== REESCRIBIR VIDEO CON IA ===== */
+let proyectoReescribirId = null;
+
+function abrirModalReescribir() {
+    if (!proyectoActual) return;
+    proyectoReescribirId = proyectoActual;
+    const modal = document.getElementById('modalReescribir');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.getElementById('reescribirCambios').value = '';
+        document.getElementById('reescribirCambios').focus();
+    }
+}
+
+function cerrarModalReescribir() {
+    const modal = document.getElementById('modalReescribir');
+    if (modal) modal.style.display = 'none';
+}
+
+async function confirmarReescribirVideo() {
+    const cambios = document.getElementById('reescribirCambios').value.trim();
+    if (!cambios) {
+        showToast('✍️ Escribe qué quieres que cambie la IA', 'warning');
+        return;
+    }
+    if (!proyectoReescribirId) return;
+
+    const progresoDiv = document.getElementById('studioProgreso');
+    const btnCrear = document.querySelector('.btn-crear-video-studio');
+    cerrarModalReescribir();
+
+    progresoDiv.style.display = 'block';
+    if (btnCrear) { btnCrear.disabled = true; btnCrear.textContent = '🎬 Reescribiendo...'; }
+    estadoProgresoHTML('🧠 Aplicando los cambios que pediste...');
+    mostrarDetalleProgreso('');
+    renderFasesProgreso(null);
+    actualizarBarraProgreso(5);
 
     try {
-        console.log("Iniciando Pre-Producción (CapCut Flow)...");
-        const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
-        
-        const bgmPath = document.getElementById('bgmPathSelected')?.value || null;
-
-        // Fase 1: Enviar solicitud de pre-producción (solo genera guion e imágenes)
-        const response = await fetch('/api/video/pre-produccion', {
+        const response = await fetch('/api/video/reescribir', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                tema: tema,
-                prompt: prompt,
-                voz: voz,
-                estilo: estilo,
-                formato: ratio,
-                bgm_path: bgmPath
-            })
+            body: JSON.stringify({ proyecto_id: proyectoReescribirId, cambios: cambios })
         });
-
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             throw new Error(errData.detail || `Error: ${response.status}`);
         }
-
         const data = await response.json();
         proyectoActual = data.video_id;
-
-        // Polling loop para checar las fases
-        pollingInterval = setInterval(async () => {
-            try {
-                const progRes = await fetch(`/api/video/progreso/${proyectoActual}`);
-                if (!progRes.ok) return;
-                const progData = await progRes.json();
-                
-                let pct = progData.progreso || 10;
-                progresoFill.style.width = pct + '%';
-                progresoPorcentaje.textContent = pct + '%';
-
-                // Mensajes de fase estilo CapCut
-                if (progData.mensaje_estado) {
-                    progresoEstado.innerHTML = progData.mensaje_estado;
-                } else {
-                    if (progData.estado === 'generando_imagenes' || pct < 80) {
-                        progresoEstado.innerHTML = `📸 <strong>Fase 1:</strong> Creando imágenes multimedia...`;
-                    } else if (pct >= 80 && pct < 90) {
-                        progresoEstado.innerHTML = `🎙️ <strong>Fase 2:</strong> Creando la voz superpuesta...`;
-                    } else if (pct >= 90 && pct < 100) {
-                        progresoEstado.innerHTML = `🎞️ <strong>Fase 3:</strong> Ensamblando escenas y video...`;
-                    }
-                }
-
-                // Colores de la barra
-                if (pct < 80) {
-                    progresoFill.style.background = '#6f42c1';
-                } else if (pct >= 80 && pct < 90) {
-                    progresoFill.style.background = '#fd7e14';
-                } else {
-                    progresoFill.style.background = '#17a2b8';
-                }
-                
-                // Si el servidor indica que el video está completado
-                if (progData.estado === 'completado' || pct >= 100) {
-                    console.log("¡Video finalizado! Cargando en la interfaz...");
-                    clearInterval(pollingInterval);
-                    pollingInterval = null;
-                    
-                    progresoFill.style.width = '100%';
-                    progresoFill.style.background = '#2ea043';
-                    progresoEstado.innerHTML = `✅ ¡Video Creado Exitosamente!`;
-                    
-                    setTimeout(async () => {
-                        progresoDiv.style.display = 'none';
-                        await cargarVideoPreview(proyectoActual);
-                        await cargarGaleriaProyectos();
-                        renderStoryboard(proyectoActual);
-                    }, 1500);
-                }
-
-                if (progData.estado === 'error') {
-                    clearInterval(pollingInterval);
-                    throw new Error(progData.error || 'Error en pre-producción');
-                }
-            } catch (err) {
-                console.error(err);
-                clearInterval(pollingInterval);
-                showToast(`❌ Error: ${err.message}`, 'error');
-            }
-        }, 2000);
-
+        ultimoPctProgreso = 5;
+        fallosRedProgreso = 0;
+        seguirVideoProyecto(data.video_id);
     } catch (error) {
-        console.error('Error iniciar pipeline:', error);
+        console.error('Error reescribiendo:', error);
         showToast(`❌ ${error.message}`, 'error');
-        progresoEstado.innerHTML = `❌ <strong>Error:</strong> ${error.message}`;
-        progresoFill.style.background = '#da3633';
-        btnCrear.disabled = false;
-        btnCrear.textContent = '🎬 Crear Video Profesional';
+        estadoProgresoHTML(`❌ <strong>Error:</strong> ${error.message}`);
+        if (btnCrear) { btnCrear.disabled = false; btnCrear.textContent = '🎬 Crear Video Profesional'; }
+        setTimeout(() => { progresoDiv.style.display = 'none'; }, 3000);
     }
 }
 
@@ -477,15 +660,19 @@ async function cargarVideoPreview(proyectoId) {
         const ratio = document.querySelector('input[name="ratio"]:checked')?.value || '16:9';
         videoWrap.className = `preview-video-wrap ratio-${ratio.replace(':', '-')}`;
 
-        // Info
-        document.getElementById('videoInfoTema').textContent = data.tema || 'Sin título';
-        document.getElementById('videoMetaFecha').textContent = `📅 ${data.creado_en || '-'}`;
-        document.getElementById('videoMetaTamano').textContent = `📦 ${data.tamano || '-'}`;
+        // Info (null-safe: algunos templates no tienen estas etiquetas)
+        const setTexto = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
+        setTexto('videoInfoTema', data.tema || 'Sin título');
+        setTexto('videoMetaFecha', `📅 ${data.creado_en || '-'}`);
+        setTexto('videoMetaTamano', `📦 ${data.tamano || '-'}`);
         const numEscenas = data.escenas_disenadas ? data.escenas_disenadas.length : (data.escenas || 0);
-        document.getElementById('videoMetaEscenas').textContent = `🎞️ ${numEscenas} escenas`;
+        setTexto('videoMetaEscenas', `🎞️ ${numEscenas} escenas`);
 
         actions.style.display = 'block';
         proyectoActual = proyectoId;
+        // Solo los videos creados con IA se pueden reescribir
+        const esIA = !!(data.prompt_original || (data.escenas_disenadas && data.escenas_disenadas.length));
+        actualizarVisibilidadReescribir(esIA);
 
     } catch (error) {
         console.error('Error cargando preview:', error);
@@ -510,6 +697,11 @@ function togglePausePreview() {
         video.pause();
         icon.textContent = '▶️';
     }
+}
+
+function actualizarVisibilidadReescribir(esIA) {
+    const btn = document.getElementById('btnReescribirIA');
+    if (btn) btn.style.display = esIA ? 'inline-block' : 'none';
 }
 
 function descargarVideoActual() {
@@ -674,15 +866,14 @@ async function seleccionarOtro(archivo, carpeta) {
     video.load();
     videoWrap.style.display = 'block';
 
-    document.getElementById('videoInfoTema').textContent = archivo;
-    document.getElementById('videoMetaFecha').textContent = `📅 Archivo`;
-    document.getElementById('videoMetaTamano').textContent = `📦 -`;
-    document.getElementById('videoMetaEscenas').textContent = `🎬 Formato: ${archivo.split('.').pop()}`;
-
+    const setTexto2 = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
+    setTexto2('videoInfoTema', archivo);
+    setTexto2('videoMetaFecha', '📅 Archivo');
+    setTexto2('videoMetaTamano', '📦 -');
+    setTexto2('videoMetaEscenas', `🎬 Formato: ${archivo.split('.').pop()}`);
     actions.style.display = 'block';
+    actualizarVisibilidadReescribir(false);
 }
-
-
 
 async function seleccionarProyectoImportado(id, archivo) {
     proyectoActual = id;
@@ -701,12 +892,14 @@ async function seleccionarProyectoImportado(id, archivo) {
     video.load();
     videoWrap.style.display = 'block';
 
-    document.getElementById('videoInfoTema').textContent = archivo;
-    document.getElementById('videoMetaFecha').textContent = `📅 Archivo`;
-    document.getElementById('videoMetaTamano').textContent = `📦 -`;
-    document.getElementById('videoMetaEscenas').textContent = `🎬 Externo`;
+    const setTexto3 = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
+    setTexto3('videoInfoTema', archivo);
+    setTexto3('videoMetaFecha', '📅 Archivo');
+    setTexto3('videoMetaTamano', '📦 -');
+    setTexto3('videoMetaEscenas', '🎬 Externo');
 
     actions.style.display = 'block';
+    actualizarVisibilidadReescribir(false);
 }
 
 async function seleccionarProyecto(proyectoId) {
@@ -791,13 +984,15 @@ function importarVideoLocalStudio(file) {
     videoWrap.style.display = 'block';
     
     // Actualizar la barra de información con datos del archivo local
-    document.getElementById('videoInfoTema').textContent = `📂 ${file.name}`;
-    document.getElementById('videoMetaFecha').textContent = `📅 Archivo Local`;
-    document.getElementById('videoMetaTamano').textContent = `📦 ${(file.size / (1024 * 1024)).toFixed(2)} MB`;
-    document.getElementById('videoMetaEscenas').textContent = `🎬 Reproductor Externo`;
+    const setTexto4 = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
+    setTexto4('videoInfoTema', `📂 ${file.name}`);
+    setTexto4('videoMetaFecha', '📅 Archivo Local');
+    setTexto4('videoMetaTamano', `📦 ${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+    setTexto4('videoMetaEscenas', '🎬 Reproductor Externo');
 
     // Mostrar botones de acción
     actions.style.display = 'block';
+    actualizarVisibilidadReescribir(false);
 
     // Botón para editar storyboard
     const btnEditId = 'btnEditStoryboardFromPreview';
@@ -1057,15 +1252,12 @@ async function ensamblarVideoFinal() {
     // document.getElementById('storyboardContainer').style.display = 'none';
     
     const progresoDiv = document.getElementById('studioProgreso');
-    const progresoFill = document.getElementById('progresoFill');
-    const progresoPorcentaje = document.getElementById('progresoPorcentaje');
-    const progresoEstado = document.getElementById('progresoEstado');
     
     progresoDiv.style.display = 'block';
-    progresoFill.style.width = '10%';
-    progresoPorcentaje.textContent = '10%';
-    progresoFill.style.background = '#fd7e14';
-    progresoEstado.innerHTML = '🎙️ <strong>Creando la voz superpuesta...</strong>';
+    actualizarBarraProgreso(10);
+    renderFasesProgreso(null);
+    iniciarTemporizadorProgreso();
+    estadoProgresoHTML('🎙️ <strong>Creando la voz superpuesta...</strong>');
     
     try {
         await fetch('/api/video/ensamblar', {
@@ -1086,39 +1278,31 @@ async function ensamblarVideoFinal() {
                 const progData = await progRes.json();
                 
                 let pct = progData.progreso || 10;
-                progresoFill.style.width = pct + '%';
-                progresoPorcentaje.textContent = pct + '%';
+                renderFasesProgreso(progData);
+                mostrarDetalleProgreso(progData.detalle_fase || '');
+                actualizarBarraProgreso(pct);
                 
                 // Mensajes de fase final CapCut Style
                 if (progData.mensaje_estado) {
-                    progresoEstado.innerHTML = progData.mensaje_estado;
+                    estadoProgresoHTML(progData.mensaje_estado);
                 } else {
                     if (pct < 35) {
-                        progresoEstado.innerHTML = '🎙️ <strong>Creando la voz superpuesta...</strong>';
+                        estadoProgresoHTML('🎙️ <strong>Creando la voz superpuesta...</strong>');
                     } else if (pct < 65) {
-                        progresoEstado.innerHTML = '📝 <strong>Creando subtítulos...</strong>';
+                        estadoProgresoHTML('📝 <strong>Creando subtítulos...</strong>');
                     } else {
-                        progresoEstado.innerHTML = '🎞️ <strong>Creando el video...</strong>';
+                        estadoProgresoHTML('🎞️ <strong>Creando el video...</strong>');
                     }
                 }
-
-                // Colores de la barra
-                if (pct < 35) {
-                    progresoFill.style.background = '#fd7e14';
-                } else if (pct < 65) {
-                    progresoFill.style.background = '#17a2b8';
-                } else {
-                    progresoFill.style.background = '#2ea043';
-                }
                 
-                if (progData.estado === 'completado') {
+                if (progData.estado === 'completado' || pct >= 100) {
                     clearInterval(pollingInterval);
                     pollingInterval = null;
+                    detenerTemporizadorProgreso();
                     
-                    progresoFill.style.width = '100%';
-                    progresoFill.style.background = '#2ea043';
-                    progresoPorcentaje.textContent = '100%';
-                    progresoEstado.innerHTML = '✅ ¡Video Finalizado!';
+                    actualizarBarraProgreso(100);
+                    renderFasesProgreso({ estado: 'completado' });
+                    estadoProgresoHTML('✅ ¡Video Finalizado!');
                     showToast('🎉 ¡Tu video está listo!', 'success');
 
                     await cargarVideoPreview(proyectoActual);
@@ -1126,17 +1310,29 @@ async function ensamblarVideoFinal() {
 
                     setTimeout(() => {
                         progresoDiv.style.display = 'none';
-                        progresoFill.style.background = '';
+                        mostrarDetalleProgreso('');
+                        actualizarBarraProgreso(0);
                     }, 3000);
                 } else if (progData.estado === 'error') {
                     clearInterval(pollingInterval);
                     pollingInterval = null;
+                    detenerTemporizadorProgreso();
                     showToast('❌ Error en el renderizado final', 'error');
-                    progresoEstado.innerHTML = '❌ <strong>Error:</strong> ' + (progData.error || 'Fallo');
-                    progresoFill.style.background = '#da3633';
+                    estadoProgresoHTML('❌ <strong>Error:</strong> ' + (progData.error || 'Fallo'));
+                    actualizarBarraProgreso(0);
                 }
             } catch (err) {
                 console.error(err);
+                fallosRedProgreso++;
+                if (fallosRedProgreso >= 8) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                    detenerTemporizadorProgreso();
+                    estadoProgresoHTML('❌ <strong>Se perdió la conexión con el servidor.</strong>');
+                    actualizarBarraProgreso(0);
+                } else {
+                    estadoProgresoHTML(`🔄 Reconectando con el servidor... (intento ${fallosRedProgreso}/8)`);
+                }
             }
         }, 2000);
         

@@ -115,6 +115,9 @@ class VideoProyecto:
     voz: str = "es-MX-JorgeNeural"
     progreso: int = 0
     bgm_path: Optional[str] = None
+    # Modo de video: "presentacion" (imágenes con movimiento de cámara, gratis) |
+    # "gratis" (IA de movimiento sin fal.ai) | "fal" (fal.ai premium) | "auto" (cascada completa)
+    modo_video: str = "auto"
     mensaje_estado: Optional[str] = "Iniciando..."
 
 
@@ -254,21 +257,27 @@ class GeneradorVideo:
             try:
                 from groq import Groq
                 client_groq = Groq(api_key=GROQ_API_KEY)
-                print("[LLM] Intentando con Groq (llama-3.3-70b-versatile)...")
+                print(f"[LLM] Intentando con Groq ({GROQ_MODEL})...")
                 
                 kwargs = {
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    "model": "llama-3.3-70b-versatile",
+                    "model": GROQ_MODEL,
                     "temperature": 0.7,
                     "max_tokens": 2500,
                 }
                 if json_mode:
                     kwargs["response_format"] = {"type": "json_object"}
-                    
-                response = client_groq.chat.completions.create(**kwargs)
+                try:
+                    response = client_groq.chat.completions.create(**kwargs)
+                except Exception as e_json:
+                    # Algunos modelos no soportan response_format=json_object:
+                    # reintentar sin él (el prompt ya exige JSON y el parser limpia markdown).
+                    print(f"[LLM] ⚠️ json_object no soportado ({e_json}). Reintentando sin response_format...")
+                    kwargs.pop("response_format", None)
+                    response = client_groq.chat.completions.create(**kwargs)
                 res_text = response.choices[0].message.content.strip()
                 if res_text:
                     print("[LLM] ✅ Éxito con Groq")
@@ -585,7 +594,7 @@ Responde SOLO JSON:
 """
             response = groq_client.chat.completions.create(
                 messages=[{"role": "system", "content": system_prompt}],
-                model="llama-3.3-70b-versatile",
+                model=GROQ_MODEL,
                 temperature=0.9,
                 max_tokens=500
             )
@@ -705,6 +714,7 @@ Responde SOLO JSON:
         # Obtener música de fondo si existe en el proyecto
         bgm_path = proyecto.bgm_path
 
+        self._actualizar_estado(proyecto_id, VideoEstado.ENSAMBLANDO, mensaje="🎞️ Ensamblando clips y subtítulos con FFmpeg...")
         self._actualizar_progreso(proyecto_id, 92, mensaje="🎞️ Ensamblando clips y subtítulos con FFmpeg...")
         video_final, error_msg = await self._ensamblar_video(
             proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas, resolucion=resolucion, bgm_path=bgm_path
@@ -978,9 +988,19 @@ Responde SOLO JSON:
 
             exito_video = False
 
+            # 🎥 MODO DE VIDEO (selector del usuario):
+            #  - "presentacion": NO llama motores de video IA — imagen con movimiento de cámara (Ken Burns). 100% gratis.
+            #  - "gratis":       evita fal.ai/Veo (pago); intenta solo Mochi HF Space (gratis) y cae a Ken Burns.
+            #  - "fal":          cascada completa: fal.ai (WAN→LTX→Mochi) → Mochi HF → Veo → Ken Burns.
+            #  - "auto" (default): usa fal.ai si hay FAL_KEY; si no, se comporta como "gratis".
+            modo_video = getattr(proyecto, "modo_video", "auto") or "auto"
+            usar_fal = modo_video in ("fal", "auto")
+            usar_veo = modo_video in ("fal", "auto")
+            usar_mochi_hf = modo_video in ("gratis", "fal", "auto")  # Mochi HF Space es gratis
+
             # 🎬 CASCADA DE GENERACIÓN DE VIDEO CON PERSONAJES EN MOVIMIENTO REAL
-            # Prioridad 1: fal.ai (WAN I2V → LTX → Mochi) — Video real con personajes animados
-            if exito_imagen and FAL_KEY:
+            # Prioridad 1: fal.ai (WAN I2V → LTX → Mochi) — Video real con personajes animados (solo si el modo lo permite)
+            if exito_imagen and FAL_KEY and usar_fal:
                 print(f"[VIDEO] 🎬 Generando video con personajes en movimiento real (fal.ai) para escena {num_escena}...")
                 exito_video = await self._generar_video_fal(
                     query_mejorado, str(img_path), str(video_path), width, height
@@ -992,10 +1012,10 @@ Responde SOLO JSON:
                             e_orig["imagen_path"] = str(video_path)
                     print(f"[VIDEO] ✅ Escena {num_escena} — Video real generado con fal.ai")
 
-            # Prioridad 2: Mochi 1 via Hugging Face Space (legado)
+            # Prioridad 2: Mochi 1 via Hugging Face Space (gratis)
             mochi_space = os.getenv("MOCHI_HF_SPACE")
-            if not exito_video and mochi_space and exito_imagen and fuente_usada != "placeholder":
-                print(f"[VIDEO] Intentando Mochi 1 HF Space para escena {num_escena}...")
+            if not exito_video and mochi_space and exito_imagen and fuente_usada != "placeholder" and usar_mochi_hf:
+                print(f"[VIDEO] Intentando Mochi 1 HF Space (gratis) para escena {num_escena}...")
                 exito_video = await self._generar_video_mochi(query_mejorado, str(img_path), str(video_path))
                 if exito_video:
                     fuente_usada = "mochi_hf"
@@ -1003,8 +1023,8 @@ Responde SOLO JSON:
                         if e_orig.get("numero") == num_escena:
                             e_orig["imagen_path"] = str(video_path)
 
-            # Prioridad 3: Google Veo 3.1 (requiere créditos de pago)
-            if not exito_video and GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
+            # Prioridad 3: Google Veo 3.1 (solo en modo fal/auto)
+            if not exito_video and GOOGLE_API_KEY and not GEMINI_SAFETY_MODE and usar_veo:
                 print(f"[VIDEO] Intentando Google Veo 3.1 para escena {num_escena}...")
                 exito_video = await self._generar_video_veo(query_mejorado, str(video_path), width, height)
                 if exito_video:
@@ -1013,9 +1033,9 @@ Responde SOLO JSON:
                         if e_orig.get("numero") == num_escena:
                             e_orig["imagen_path"] = str(video_path)
 
-            # Fallback: usar imagen estática (se animará con Ken Burns en el ensamblaje)
+            # Fallback: usar imagen (se animará con movimiento de cámara Ken Burns en el ensamblaje)
             if not exito_video:
-                print(f"[VIDEO] ⚠️ Sin video para escena {num_escena} — se usará imagen estática con Ken Burns")
+                print(f"[VIDEO] ⚠️ Sin video IA para escena {num_escena} — se usará imagen con movimiento de cámara (Ken Burns)")
                 for e_orig in proyecto.escenas_disenadas:
                     if e_orig.get("numero") == num_escena:
                         e_orig["imagen_path"] = str(img_path)
@@ -1835,41 +1855,59 @@ Responde SOLO JSON:
                 "-t", f"{duracion:.4f}",
                 "-vf", vf_video,
                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
                 "-an",
                 out_path
             ]
             ok, err = self._run_ffmpeg(cmd)
             return ok and Path(out_path).exists(), err if not ok else ""
         else:
-            # Imagen estática: clip limpio SIN zoom ni movimiento artificial.
-            print(f"[CLIP] Escena {i+1}: Convirtiendo imagen a clip estático limpio (sin zoom)...")
-            vf_static = (
-                f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                f"crop={w}:{h},"
+            # Imagen estática: se aplica MOVIMIENTO DE CÁMARA (Ken Burns) para que
+            # el video nunca se sienta congelado — estilo CapCut (100% gratis).
+            print(f"[CLIP] Escena {i+1}: Aplicando movimiento de cámara Ken Burns a la imagen...")
+            # Zoom alternado: pares hacen zoom-in, impares zoom-out (dinámica de video)
+            frames_total = max(8, int(round(duracion * fps)))
+            if i % 2 == 0:
+                # Zoom-in progresivo (empieza en 1.0 y sube hasta 1.22)
+                zoom_expr = "min(zoom+0.0015,1.22)"
+            else:
+                # Zoom-out progresivo (empieza en 1.22 y baja a 1.0)
+                zoom_expr = "if(eq(on,1),1.22,max(zoom-0.0015,1.0))"
+            # Escala previa más grande para que el zoom no pierda nitidez
+            kb_scale_w = w + int(w * 0.25 / 2) * 2
+            kb_scale_h = h + int(h * 0.25 / 2) * 2
+            vf_kb = (
+                f"scale={kb_scale_w}:{kb_scale_h}:force_original_aspect_ratio=increase,"
+                f"crop={kb_scale_w}:{kb_scale_h},"
+                f"zoompan=z='{zoom_expr}':d={frames_total}:"
+                f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                f"s={w}x{h}:fps={fps},"
                 f"format=yuv420p,"
-                f"fps={fps},"
                 f"fade=t=in:st=0:d={fade_in_d:.3f},"
                 f"fade=t=out:st={fade_out_st:.3f}:d={fade_out_d:.3f}"
             )
             cmd_clip = [
-                "ffmpeg", "-y", "-loop", "1",
-                "-t", f"{duracion:.4f}",
+                "ffmpeg", "-y",
                 "-i", recurso_path,
-                "-vf", vf_static,
+                "-vf", vf_kb,
+                "-frames:v", str(frames_total),
                 "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                "-t", f"{duracion:.4f}", out_path
+                "-movflags", "+faststart",
+                out_path
             ]
             ok, err = self._run_ffmpeg(cmd_clip)
             if ok and Path(out_path).exists():
                 return True, ""
             else:
-                print(f"[FFMPEG ERR] {err}")
-                # Fallback mínimo
+                print(f"[FFMPEG ERR Ken Burns] {err}")
+                # Fallback mínimo: imagen quieta pero compatible (sin zoom)
                 cmd_st = [
                     "ffmpeg", "-y", "-loop", "1", "-t", f"{duracion:.3f}",
                     "-i", recurso_path,
-                    "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps}",
+                    "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,fps={fps},format=yuv420p",
                     "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",
                     "-t", f"{duracion:.3f}", out_path
                 ]
                 ok_st, err_st = self._run_ffmpeg(cmd_st)
@@ -2026,7 +2064,7 @@ Responde SOLO JSON:
                     return None, f"No se generó ningún clip en streaming. Último error: {last_stream_err}"
 
                 # Concatenar y aplicar audio
-                self._actualizar_progreso(proyecto_id, 97)
+                self._actualizar_progreso(proyecto_id, 97, mensaje="🎞️ Ensamblando video con audio (modo streaming)...")
                 # Aumentamos el timeout a 900s (15 min) para videos de 10 minutos
                 await asyncio.to_thread(concatenar_segmentos, clips_streaming, str(video_final), audio_path, bgm_path)
                 
@@ -2074,7 +2112,9 @@ Responde SOLO JSON:
                 self._actualizar_progreso(proyecto_id, pct_assembly)
                 
                 dur_escena = duraciones_escenas[i]
-                dur_clip = dur_escena + 1.0 # Colchón de 1 segundo para evitar cortes
+                # Sin colchón extra: la duración del clip = duración del subtítulo/escena,
+                # para que los subtítulos SIEMPRE queden sincronizados con la imagen.
+                dur_clip = dur_escena
                 clip_path = work_dir / f"clip_{i:02d}.mp4"
                 
                 ok, err = await asyncio.to_thread(self._crear_clip_segmento, img_path, dur_clip, w, h, str(clip_path), fps, i)
@@ -2105,7 +2145,7 @@ Responde SOLO JSON:
                 return None, f"Error concatenando clips: {err[:150]}"
 
             # ── PASO 3: SRT sincronizado ──────────────────────────────
-            self._actualizar_progreso(proyecto_id, 98)
+            self._actualizar_progreso(proyecto_id, 98, mensaje="💬 Sincronizando subtítulos con el audio (Whisper)...")
             srt_path = work_dir / "subtitulos.srt"
             srt_generado = False
             
@@ -2116,6 +2156,7 @@ Responde SOLO JSON:
             if not srt_generado:
                 print("[VIDEO] Fallback: generando subtítulos matemáticos...")
                 srt_path.write_text(self._generar_srt(imagenes, duraciones_escenas), encoding="utf-8")
+                self._actualizar_progreso(proyecto_id, 98, mensaje="💬 Subtítulos generados. Aplicando al video...")
 
             # --- PASO 4: audio + subtítulos ────────────────────────────
             # Ajustamos PlayResY a la altura real para que el tamaño de letra sea predecible
@@ -2158,16 +2199,17 @@ Responde SOLO JSON:
                         "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
                         "-map", "0:v:0", "-map", "1:a:0"
                     ]
-                cmd_final += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac"]
+                cmd_final += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart"]
             else:
                 cmd_final += [
                     "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
-                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart"
                 ]
             cmd_final.append(str(video_final))
 
             print("[VIDEO] Aplicando SRT + audio...")
-            self._actualizar_progreso(proyecto_id, 99)
+            self._actualizar_progreso(proyecto_id, 99, mensaje="🎞️ Ensamblando video final: subtítulos, voz y música...")
             ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_final)
 
             # Fallback sin subtítulos si libass no está disponible
@@ -2176,7 +2218,7 @@ Responde SOLO JSON:
                 cmd_ns = ["ffmpeg", "-y", "-i", str(video_base)]
                 if audio_path and Path(audio_path).exists():
                     cmd_ns += ["-i", str(audio_path), "-c:a", "aac"]
-                cmd_ns += ["-c:v", "copy", str(video_final)]
+                cmd_ns += ["-c:v", "copy", "-movflags", "+faststart", str(video_final)]
                 ok, err = await asyncio.to_thread(self._run_ffmpeg, cmd_ns)
 
             # ── Limpieza ─────────────────────────────────────────────
@@ -2479,7 +2521,7 @@ Responde SOLO JSON:
             
             resp = await asyncio.wait_for(
                 client_groq.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model=GROQ_MODEL,
                     messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt_visual}],
                     temperature=0.7, max_tokens=100
                 ),

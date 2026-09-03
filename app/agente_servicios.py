@@ -665,7 +665,7 @@ Responde SOLO con JSON válido con esta estructura:
 
         try:
             completion = client.chat.completions.create(
-                model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                model=os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"),
                 messages=[
                     {"role": "system", "content": "Eres un ingeniero de software senior que diagnostica errores y propone parches. Siempre respondes JSON válido."},
                     {"role": "user", "content": prompt_usuario},

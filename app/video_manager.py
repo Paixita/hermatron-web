@@ -39,6 +39,7 @@ def pre_producir_video_task(payload: Dict[str, Any]):
     prompt = payload.get("prompt")
     voz = payload.get("voz", "es-MX-JorgeNeural")
     bgm_path = payload.get("bgm_path")
+    modo_video = payload.get("modo_video", "auto") or "auto"
     
     try:
         # 1. Analizar tema
@@ -49,11 +50,12 @@ def pre_producir_video_task(payload: Dict[str, Any]):
         # self.update_state(state="DISENANDO", meta={"progreso": 30})
         run_async(generador_video.disenar_escenas(proyecto_id, client))
         
-        # Configurar la voz y bgm en el proyecto
+        # Configurar la voz, bgm y modo de video en el proyecto
         proj_obj = generador_video._cargar_proyecto(proyecto_id)
         if proj_obj:
             proj_obj.voz = voz
             proj_obj.bgm_path = bgm_path
+            proj_obj.modo_video = modo_video
             generador_video._guardar_proyecto(proj_obj)
         
         # 3. Pre-producir (Generar imágenes)
