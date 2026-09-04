@@ -115,8 +115,53 @@ def _ejecutar_codigo_python(codigo: str) -> dict:
 import json
 from app.config import ALLOW_SYSTEM_COMMANDS, ALLOW_FILE_ACCESS
 def _extraer_tool_calls_de_texto(texto: str) -> list:
-    """Extrae múltiples objetos JSON concatenados de un texto (ej: {...}{...})"""
+    """Extrae tool calls de un texto generado por el LLM.
+    Soporta 2 formatos que algunos modelos emiten en texto plano:
+      1. JSON  {"type":"function","function":{"name":"...","arguments":"{...}"}} {...}{...}
+      2. XML   <tool_call><function=nombre><parameter=clave>valor</parameter></function></tool_call>
+    Esto corrige el bug donde HERMATRON mostraba el comando como texto
+    sin ejecutarlo (pantallazo con '<tool_call>' pegado).
+    """
     objs = []
+    
+    # ── Formato 2: <tool_call><function=...><parameter=...>...</parameter></function></tool_call> ──
+    import re
+    # Primero buscar los bloques COMPLETOS con <tool_call> (si existen, no volver a
+    # matchear su <function> interno en el segundo regex para no duplicar).
+    bloques_completos = re.findall(
+        r'<tool_call>\s*<function=([a-zA-Z0-9_]+)>(.*?)</function>\s*</tool_call>',
+        texto, re.DOTALL
+    )
+    texto_sin_completos = re.sub(
+        r'<tool_call>\s*<function=([a-zA-Z0-9_]+)>.*?</function>\s*</tool_call>',
+        '', texto, flags=re.DOTALL
+    )
+    patron_xml = bloques_completos + re.findall(
+        r'<function=([a-zA-Z0-9_]+)>(.*?)</function>',
+        texto_sin_completos, re.DOTALL
+    )
+    for nombre_fun, cuerpo in patron_xml:
+        try:
+            params = {}
+            for m_param in re.finditer(r'<parameter=([a-zA-Z0-9_]+)>\s*(.*?)\s*</parameter>', cuerpo, re.DOTALL):
+                clave, valor = m_param.group(1), m_param.group(2).strip()
+                params[clave] = valor
+            # Si no usó <parameter>, asumir que el cuerpo entero es el valor de 'comando' o 'query'
+            if not params:
+                cuerpo_limpio = re.sub(r'<[^>]+>', '', cuerpo).strip()
+                if cuerpo_limpio:
+                    clave_default = "comando" if nombre_fun in ("ejecutar_comando_pc", "ejecutar_codigo_python") else "query"
+                    params[clave_default] = cuerpo_limpio
+            if params:
+                objs.append({
+                    "type": "function",
+                    "function": {"name": nombre_fun, "arguments": json.dumps(params)}
+                })
+                print(f"[TOOL-XML] ✅ Parseada llamada <tool_call> → {nombre_fun}")
+        except Exception as e:
+            print(f"[TOOL-XML] Error parseando <tool_call>: {e}")
+    
+    # ── Formato 1: JSON concatenado {...}{...} ──
     depth = 0
     start = -1
     in_string = False
@@ -261,7 +306,17 @@ def _ejecutar_comando_windows_no_bloqueante(comando: str) -> dict:
 # ==========================================
 # EL LAVADO DE CEREBRO (PROMPT ESTRICTO)
 # ==========================================
-SYSTEM_PROMPT = """Eres HERMATRON, un Estudio de Inteligencia Artificial Multimodal y Asistente Creativo.
+# HERMATRON debe saber en qué sistema operativo corre para usar los comandos correctos
+# (evita errores tipo 'ver' en Linux o 'uname' en Windows).
+PLATAFORMA_ACTUAL = {
+    "linux": "Linux (Ubuntu/Debian). Usa comandos POSIX: uname -a, ls, pwd, cat, whoami, free -h. NUNCA uses 'ver', 'dir' ni 'systeminfo'.",
+    "darwin": "macOS. Usa comandos POSIX: uname -a, ls, pwd, cat, sw_vers.",
+    "nt": "Windows. Usa comandos CMD: ver, dir, systeminfo, whoami. El handler ya lanza apps GUI sin bloquear.",
+}.get(sys.platform if hasattr(sys, 'platform') else "linux", "Sistema operativo desconocido. Prueba primero con 'uname -a' o 'ver' para detectarlo.")
+
+SYSTEM_PROMPT = f"""Eres HERMATRON, un Estudio de Inteligencia Artificial Multimodal y Asistente Creativo.
+PLATAFORMA DEL SISTEMA DONDE CORRES AHORA MISMO: {PLATAFORMA_ACTUAL}
+Esta información es VERDADERA y actual. Úsala SIEMPRE para elegir los comandos correctos: si preguntan qué sistema operativo tiene el usuario, responde con el resultado real de 'uname -a' (Linux) o 'ver' (Windows) ejecutado con la herramienta, sin inventar.
 ATENCIÓN: Tienes capacidades avanzadas tanto en la nube como en el sistema local.
 TUS CAPACIDADES PRINCIPALES:
 1. ERES DIRECTOR DE CINE: Puedes crear videos cinematográficos completos (múltiples escenas, guion, voz, música).
@@ -573,20 +628,27 @@ herramientas_groq.extend([
 
 
 async def _generar_imagen_tool(argumentos: dict) -> dict:
-    """Genera una imagen con Pollinations (motor gratuito)."""
+    """Genera una imagen con Nano Banana (Gemini) — único creador de imágenes de HERMATRON.
+    Si la cuota de Gemini está agotada, usa respaldo de emergencia con aviso claro."""
     prompt_img = argumentos.get("prompt", "")
     formato = argumentos.get("formato", "16:9")
-    print(f"🎨 [IMAGEN] Generando: {prompt_img}")
+    print(f"🎨 [IMAGEN] Generando con Nano Banana: {prompt_img}")
     import uuid
     img_id = f"gen_{uuid.uuid4().hex[:8]}"
     img_path = VIDEOS_DIR / f"{img_id}.jpg"
     res_map = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1024, 1024)}
     w, h = res_map.get(formato, (1920, 1080))
     try:
-        success = await generador_video._generar_imagen_pollinations(prompt_img, str(img_path), w, h)
+        from app.config import GOOGLE_API_KEY, GEMINI_SAFETY_MODE
+        success = False
+        if GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
+            success = await generador_video._generar_imagen_gemini(prompt_img, str(img_path), w, h)
+        if not success:
+            print(f"⚠️ [IMAGEN] Nano Banana sin cuota — usando respaldo de emergencia para: {prompt_img[:50]}")
+            success = await generador_video._generar_imagen_pollinations(prompt_img, str(img_path), w, h)
         if success:
             return {"status": "success", "url": f"/video_files/{img_id}.jpg", "mensaje": "Imagen generada con éxito."}
-        return {"status": "error", "mensaje": "No se pudo generar la imagen."}
+        return {"status": "error", "mensaje": "No se pudo generar la imagen (cuota de Gemini agotada)."}
     except Exception as e:
         return {"status": "error", "mensaje": str(e)}
 
@@ -909,65 +971,127 @@ async def chat(chat_request: ChatRequest):
             contenido = mensaje_respuesta.content or ""
             respuesta = contenido
             try:
-                start = contenido.find("{")
-                end = contenido.rfind("}")
-                if start != -1 and end != -1:
-                    blob = contenido[start:end+1].replace('\\"', '"')
-                    tool_obj = json.loads(blob)
-                    nombre = tool_obj.get("name")
-                    params = tool_obj.get("parameters") or {}
-                    
-                    # Heurística: si el modelo envía un JSON con 'prompt' pero sin 'name', asumimos que es generar_imagen
-                    if not nombre and "prompt" in tool_obj:
-                        nombre = "generar_imagen"
-                        params = tool_obj
-                    
-                    nombres_conocidos = [
-                        "buscar_en_internet", "descargar_pagina_web", "ejecutar_comando_pc",
-                        "obtener_suscriptores_youtube", "ejecutar_codigo_python", "generar_imagen",
-                        "listar_carpeta", "leer_archivo", "escribir_archivo", "crear_carpeta",
-                        "copiar_elemento", "mover_elemento", "eliminar_elemento", "buscar_archivos",
-                        "info_ruta", "leer_codigo_proyecto",
-                        "github_buscar_repos", "github_leer_archivo", "github_listar_contenido",
-                        "github_descargar_repo", "github_buscar_codigo",
-                        "guardar_conocimiento", "buscar_conocimiento", "actualizar_conocimiento_web",
-                        "proponer_arreglo",
-                    ]
-                    if nombre in nombres_conocidos:
-                        print(f"🧰 [TOOL-FALLBACK] Ejecutando {nombre} desde texto")
-                        tool_res = json.loads(await ejecutar_herramienta(nombre, params))
-
-                        mensajes_groq.append({"role": "assistant", "content": contenido})
-                        mensajes_groq.append({"role": "user", "content": f"[SISTEMA] El resultado de la herramienta '{nombre}' fue:\n{json.dumps(tool_res)}\n\nUsa esta información para responder a mi pregunta anterior de forma natural."})
-                        # Qwen3 (si es principal) → Groq → Qwen3 → OpenRouter
-                        resp_fb = ""
-                        if LLM_PROVIDER == "qwen3" and qwen3_client:
-                            try:
-                                comp_q3 = await qwen3_client.chat.completions.create(
-                                    messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
-                                )
-                                resp_fb = comp_q3.choices[0].message.content
-                            except Exception as e_q3:
-                                print(f"⚠️ [QWEN3 FALLÓ-FB] {e_q3}")
-                        if not resp_fb and client:
-                            try:
-                                chat_completion_final = client.chat.completions.create(
-                                    messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
-                                )
-                                resp_fb = chat_completion_final.choices[0].message.content
-                            except Exception as e_g:
-                                print(f"⚠️ [GROQ FALLÓ-FB] {e_g} — usando Qwen3/OpenRouter...")
-                        if not resp_fb and qwen3_client and LLM_PROVIDER != "qwen3":
+                # 1) Detectar tool calls en TEXTO (formato <tool_call> XML o JSON) —
+                #    corrige el bug donde HERMATRON pegaba el comando sin ejecutarlo.
+                tool_calls_texto = _extraer_tool_calls_de_texto(contenido)
+                ejecutadas = []
+                if tool_calls_texto:
+                    for tc in tool_calls_texto:
+                        nombre = tc.get("function", {}).get("name")
+                        try:
+                            params = json.loads(tc.get("function", {}).get("arguments", "{}"))
+                        except:
+                            params = {}
+                        nombres_conocidos = [
+                            "buscar_en_internet", "descargar_pagina_web", "ejecutar_comando_pc",
+                            "obtener_suscriptores_youtube", "ejecutar_codigo_python", "generar_imagen",
+                            "listar_carpeta", "leer_archivo", "escribir_archivo", "crear_carpeta",
+                            "copiar_elemento", "mover_elemento", "eliminar_elemento", "buscar_archivos",
+                            "info_ruta", "leer_codigo_proyecto",
+                            "github_buscar_repos", "github_leer_archivo", "github_listar_contenido",
+                            "github_descargar_repo", "github_buscar_codigo",
+                            "guardar_conocimiento", "buscar_conocimiento", "actualizar_conocimiento_web",
+                            "proponer_arreglo",
+                        ]
+                        if nombre in nombres_conocidos:
+                            print(f"🧰 [TOOL-FALLBACK] Ejecutando {nombre} desde texto")
+                            tool_res = json.loads(await ejecutar_herramienta(nombre, params))
+                            ejecutadas.append((nombre, tool_res))
+                
+                if ejecutadas:
+                    mensajes_groq.append({"role": "assistant", "content": contenido})
+                    resumen_tools = "\n".join(
+                        f"[{n}] {json.dumps(r)}" for n, r in ejecutadas
+                    )
+                    mensajes_groq.append({"role": "user", "content": f"[SISTEMA] Resultados de las herramientas ejecutadas:\n{resumen_tools}\n\nUsa esta información para responder a mi pregunta anterior de forma natural."})
+                    resp_fb = ""
+                    if LLM_PROVIDER == "qwen3" and qwen3_client:
+                        try:
                             comp_q3 = await qwen3_client.chat.completions.create(
                                 messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
                             )
                             resp_fb = comp_q3.choices[0].message.content
-                        if not resp_fb and openrouter_client:
-                            comp_fb = await openrouter_client.chat.completions.create(
-                                messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
+                        except Exception as e_q3:
+                            print(f"⚠️ [QWEN3 FALLÓ-FB] {e_q3}")
+                    if not resp_fb and client:
+                        try:
+                            chat_completion_final = client.chat.completions.create(
+                                messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
                             )
-                            resp_fb = comp_fb.choices[0].message.content
-                        respuesta = resp_fb
+                            resp_fb = chat_completion_final.choices[0].message.content
+                        except Exception as e_g:
+                            print(f"⚠️ [GROQ FALLÓ-FB] {e_g} — usando Qwen3/OpenRouter...")
+                    if not resp_fb and qwen3_client and LLM_PROVIDER != "qwen3":
+                        comp_q3 = await qwen3_client.chat.completions.create(
+                            messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
+                        )
+                        resp_fb = comp_q3.choices[0].message.content
+                    if not resp_fb and openrouter_client:
+                        comp_fb = await openrouter_client.chat.completions.create(
+                            messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
+                        )
+                        resp_fb = comp_fb.choices[0].message.content
+                    respuesta = resp_fb
+                else:
+                    # 2) Fallback anterior: JSON suelto con 'name' + 'parameters'
+                    start = contenido.find("{")
+                    end = contenido.rfind("}")
+                    if start != -1 and end != -1:
+                        blob = contenido[start:end+1].replace('\\"', '"')
+                        tool_obj = json.loads(blob)
+                        nombre = tool_obj.get("name")
+                        params = tool_obj.get("parameters") or {}
+                        
+                        # Heurística: si el modelo envía un JSON con 'prompt' pero sin 'name', asumimos que es generar_imagen
+                        if not nombre and "prompt" in tool_obj:
+                            nombre = "generar_imagen"
+                            params = tool_obj
+                        
+                        nombres_conocidos = [
+                            "buscar_en_internet", "descargar_pagina_web", "ejecutar_comando_pc",
+                            "obtener_suscriptores_youtube", "ejecutar_codigo_python", "generar_imagen",
+                            "listar_carpeta", "leer_archivo", "escribir_archivo", "crear_carpeta",
+                            "copiar_elemento", "mover_elemento", "eliminar_elemento", "buscar_archivos",
+                            "info_ruta", "leer_codigo_proyecto",
+                            "github_buscar_repos", "github_leer_archivo", "github_listar_contenido",
+                            "github_descargar_repo", "github_buscar_codigo",
+                            "guardar_conocimiento", "buscar_conocimiento", "actualizar_conocimiento_web",
+                            "proponer_arreglo",
+                        ]
+                        if nombre in nombres_conocidos:
+                            print(f"🧰 [TOOL-FALLBACK] Ejecutando {nombre} desde texto")
+                            tool_res = json.loads(await ejecutar_herramienta(nombre, params))
+
+                            mensajes_groq.append({"role": "assistant", "content": contenido})
+                            mensajes_groq.append({"role": "user", "content": f"[SISTEMA] El resultado de la herramienta '{nombre}' fue:\n{json.dumps(tool_res)}\n\nUsa esta información para responder a mi pregunta anterior de forma natural."})
+                            resp_fb = ""
+                            if LLM_PROVIDER == "qwen3" and qwen3_client:
+                                try:
+                                    comp_q3 = await qwen3_client.chat.completions.create(
+                                        messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
+                                    )
+                                    resp_fb = comp_q3.choices[0].message.content
+                                except Exception as e_q3:
+                                    print(f"⚠️ [QWEN3 FALLÓ-FB] {e_q3}")
+                            if not resp_fb and client:
+                                try:
+                                    chat_completion_final = client.chat.completions.create(
+                                        messages=mensajes_groq, model=GROQ_MODEL, temperature=0.7, max_tokens=2048
+                                    )
+                                    resp_fb = chat_completion_final.choices[0].message.content
+                                except Exception as e_g:
+                                    print(f"⚠️ [GROQ FALLÓ-FB] {e_g} — usando Qwen3/OpenRouter...")
+                            if not resp_fb and qwen3_client and LLM_PROVIDER != "qwen3":
+                                comp_q3 = await qwen3_client.chat.completions.create(
+                                    messages=mensajes_groq, model=QWEN3_MODEL, temperature=0.7, max_tokens=2048
+                                )
+                                resp_fb = comp_q3.choices[0].message.content
+                            if not resp_fb and openrouter_client:
+                                comp_fb = await openrouter_client.chat.completions.create(
+                                    messages=mensajes_groq, model=OPENROUTER_MODEL, temperature=0.7, max_tokens=2048
+                                )
+                                resp_fb = comp_fb.choices[0].message.content
+                            respuesta = resp_fb
             except Exception as e:
                 print(f"❌ [TOOL-FALLBACK ERROR] {e}")
 

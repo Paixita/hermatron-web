@@ -122,11 +122,11 @@ async def regenerar_imagen_task(proyecto_id: str, escena_num: int, nuevo_prompt:
             exito = False
             from app.config import GOOGLE_API_KEY, GEMINI_SAFETY_MODE
             if GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
-                print(f"[REGENERAR] Intentando con Gemini y consistencia para alt {i+1}...")
+                print(f"[REGENERAR] 🍌 Intentando con Nano Banana (Gemini) y consistencia para alt {i+1}...")
                 exito = await generador_video._generar_imagen_gemini(prompt_final, str(alt_path), width, height, reference_images=ref_imgs)
                 
             if not exito:
-                print(f"[REGENERAR] Usando Pollinations para alt {i+1}...")
+                print(f"[REGENERAR] ⚠️ Nano Banana sin cuota — respaldo de emergencia para alt {i+1}...")
                 exito = await generador_video._generar_imagen_pollinations(prompt_final, str(alt_path), width, height)
             
             if not exito:

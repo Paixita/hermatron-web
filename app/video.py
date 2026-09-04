@@ -797,9 +797,17 @@ Responde SOLO JSON:
             self._actualizar_estado(proyecto_id, VideoEstado.ENSAMBLANDO)
             self._actualizar_progreso(proyecto_id, 95)
 
-            video_final = await self._ensamblar_video(
+            # _ensamblar_video devuelve (ruta_final, error_msg)
+            video_final, error_msg = await self._ensamblar_video(
                 proyecto_id, work_dir, proyecto.audio_path, escenas_aprobadas
             )
+            if not video_final or not Path(video_final).exists():
+                error_desc = error_msg or "Error en ensamblaje de FFmpeg"
+                print(f"[VIDEO] Error crítico en ensamblaje: {error_desc}")
+                self._actualizar_estado(proyecto_id, VideoEstado.ERROR, error_desc, mensaje="❌ Error crítico en el ensamblado")
+                self._actualizar_progreso(proyecto_id, 0)
+                return ""
+
             self._actualizar_progreso(proyecto_id, 100)
 
             # COMPLETADO
@@ -966,25 +974,42 @@ Responde SOLO JSON:
                             if os.path.exists(local_img_ref):
                                 ref_imgs.append(local_img_ref)
 
-            # Intentar generar imagen base con Gemini
+            # 🍌 ÚNICO CREADOR DE IMÁGENES: Nano Banana (Gemini)
+            # El usuario pidió eliminar los otros creadores (Pollinations/Pexels/Unsplash)
+            # para que la IA no se confunda. Nano Banana es ahora la única vía oficial.
             if GOOGLE_API_KEY and not GEMINI_SAFETY_MODE:
-                print(f"[VIDEO] Generando imagen base con Gemini (Nano Banana) para escena {num_escena}...")
+                print(f"[VIDEO] 🍌 Generando imagen con Nano Banana (Gemini) para escena {num_escena}...")
                 exito_imagen = await self._generar_imagen_gemini(query_mejorado, str(img_path), width, height, reference_images=ref_imgs)
-            
-            # Fallback a Pollinations para imagen base
-            if not exito_imagen:
-                print(f"[VIDEO] Generando imagen base con Pollinations para escena {num_escena}...")
-                exito_imagen = await self._generar_imagen_pollinations(query_mejorado, str(img_path), width, height, seed=project_seed)
                 if exito_imagen:
-                    fuente_usada = "pollinations"
+                    fuente_usada = "gemini_nano_banana"
+            else:
+                print(f"[VIDEO] ⚠️ Gemini desactivado (sin GOOGLE_API_KEY o SAFETY_MODE) para escena {num_escena}")
+            
+            # Emergencia SOLO si Nano Banana no pudo generar (cuota 429 / error):
+            # 1) Primero el generador OPEN SOURCE de HuggingFace (FLUX.1-dev, gratis, hiperrealista)
+            # 2) Luego Pollinations flux (último respaldo) — con aviso claro en el panel.
+            if not exito_imagen:
+                print(f"[VIDEO] ⚠️ Nano Banana no disponible para escena {num_escena} — intentando FLUX.1-dev (HuggingFace, open source)...")
+                exito_imagen = await self._generar_imagen_huggingface(query_mejorado, str(img_path), width, height, seed=project_seed)
+                if exito_imagen:
+                    fuente_usada = "huggingface_flux_open_source"
+                    print(f"[VIDEO] ✅ Escena {num_escena} generada con FLUX.1-dev (open source gratis)")
                 else:
-                    print(f"[VIDEO] Fallback total a Placeholder para escena {num_escena}")
-                    await self._generar_imagen_placeholder(
-                        str(img_path), escena.get("descripcion_visual", f"Escena {num_escena}"),
-                        indice=i, total=total, query=query
+                    self._actualizar_progreso(
+                        proyecto_id, 60 + int(i / total * 20),
+                        mensaje=f"⚠️ Nano Banana y FLUX sin cuota — último respaldo para escena {num_escena}"
                     )
-                    exito_imagen = True
-                    fuente_usada = "placeholder"
+                    exito_imagen = await self._generar_imagen_pollinations(query_mejorado, str(img_path), width, height, seed=project_seed)
+                    if exito_imagen:
+                        fuente_usada = "pollinations_emergencia"
+                    else:
+                        print(f"[VIDEO] Fallback total a Placeholder para escena {num_escena}")
+                        await self._generar_imagen_placeholder(
+                            str(img_path), escena.get("descripcion_visual", f"Escena {num_escena}"),
+                            indice=i, total=total, query=query
+                        )
+                        exito_imagen = True
+                        fuente_usada = "placeholder"
 
             exito_video = False
 
@@ -1169,60 +1194,113 @@ Responde SOLO JSON:
 
     async def _generar_imagen_gemini(self, prompt: str, ruta_salida: str, width: int = 1024, height: int = 1024, reference_images: list = None) -> bool:
         """
-        Generación de imagen premium usando Nano Banana 2 (Gemini 3.1 Flash Image).
+        Generación de imagen premium usando Nano Banana (Gemini).
+        Cascada de modelos actualizados (el más nuevo primero):
+          1. gemini-3-pro-image-preview       (Nano Banana Pro — flagship 2026)
+          2. gemini-3.1-flash-image-preview    (Nano Banana 2)
+          3. gemini-2.5-flash-image            (Nano Banana 1 — más estable)
+        Con reintento automático en 429 (límite por minuto) y prompt reforzado
+        para rostros nítidos y fieles (evita la distorsión facial).
         """
+        MODELOS_NANO_BANANA = [
+            "gemini-3-pro-image-preview",
+            "gemini-3.1-flash-image-preview",
+            "gemini-2.5-flash-image",
+        ]
         if not GOOGLE_API_KEY or GEMINI_SAFETY_MODE:
             if GEMINI_SAFETY_MODE:
                 print("[SAFETY] Gemini saltado por Modo de Seguridad Activo.")
             return False
-            
-        try:
-            print(f"[GEMINI] Generando imagen {width}x{height} con Nano Banana 2...")
-            client = genai.Client(api_key=GOOGLE_API_KEY)
-            
-            # Añadir pista de aspecto al prompt para el modelo
-            ar_hint = "portrait aspect ratio, 9:16, vertical" if height > width else "landscape aspect ratio, 16:9, horizontal"
-            if width == height: ar_hint = "square aspect ratio, 1:1"
-            
-            from PIL import Image
-            contents = []
-            
-            if reference_images:
-                for img_path in reference_images:
-                    if os.path.exists(img_path):
-                        try:
-                            pil_img = Image.open(img_path)
-                            contents.append(pil_img)
-                            print(f"[GEMINI] Usando imagen de referencia para consistencia: {img_path}")
-                        except Exception as e:
-                            print(f"[GEMINI] Error cargando imagen de referencia {img_path}: {e}")
-            
-            prompt_with_ar = f"{prompt}. Note: Generate a new image incorporating the style, face, and visual identity of the reference characters shown in the input images. Maintain face consistency for characters. Generate in {ar_hint}."
-            contents.append(prompt_with_ar)
-            
-            # Modelo específico de 2026 para generación de imágenes
-            # Pedimos específicamente modalidad IMAGE
-            response = await client.aio.models.generate_content(
-                model="gemini-3.1-flash-image-preview",
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE"]
+        
+        # Añadir pista de aspecto al prompt para el modelo
+        ar_hint = "portrait aspect ratio, 9:16, vertical" if height > width else "landscape aspect ratio, 16:9, horizontal"
+        if width == height: ar_hint = "square aspect ratio, 1:1"
+        
+        from PIL import Image
+        contents = []
+        
+        if reference_images:
+            for img_path in reference_images:
+                if os.path.exists(img_path):
+                    try:
+                        pil_img = Image.open(img_path)
+                        contents.append(pil_img)
+                        print(f"[GEMINI] Usando imagen de referencia para consistencia: {img_path}")
+                    except Exception as e:
+                        print(f"[GEMINI] Error cargando imagen de referencia {img_path}: {e}")
+        
+        # Prompt reforzado: rostros perfectos, sin deformaciones, personajes consistentes
+        prompt_rostros = (
+            f"{prompt}. "
+            "CRITICAL QUALITY RULES: render human faces with PERFECT anatomy — "
+            "symmetric eyes, natural skin texture, correct proportions, no distortion, "
+            "no extra limbs, no warped features, photorealistic detail. "
+            "Note: Generate a new image incorporating the style, face, and visual identity "
+            "of the reference characters shown in the input images. Maintain face consistency "
+            "for characters across scenes. Generate in {ar_hint}."
+        )
+        contents.append(prompt_rostros)
+        
+        ultimo_error = ""
+        for modelo in MODELOS_NANO_BANANA:
+            try:
+                print(f"[GEMINI] Generando imagen {width}x{height} con {modelo}...")
+                client = genai.Client(api_key=GOOGLE_API_KEY)
+                
+                response = await client.aio.models.generate_content(
+                    model=modelo,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"]
+                    )
                 )
-            )
-            
-            # Extraer los bytes de la imagen de la respuesta
-            if response.candidates and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        with open(ruta_salida, "wb") as f:
-                            f.write(part.inline_data.data)
-                        print(f"[GEMINI] Imagen generada exitosamente ({len(part.inline_data.data)//1024} KB)")
-                        return True
-            
-            return False
-        except Exception as e:
-            print(f"[GEMINI] Error en generación de imagen: {e}")
-            return False
+                
+                # Extraer los bytes de la imagen de la respuesta
+                if response.candidates and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if part.inline_data:
+                            with open(ruta_salida, "wb") as f:
+                                f.write(part.inline_data.data)
+                            print(f"[GEMINI] ✅ Imagen generada con {modelo} ({len(part.inline_data.data)//1024} KB)")
+                            return True
+                print(f"[GEMINI] {modelo} no devolvió imagen (sin inline_data). Probando siguiente...")
+                ultimo_error = f"{modelo}: respuesta sin imagen"
+            except Exception as e:
+                mensaje = str(e)
+                ultimo_error = mensaje[:200]
+                print(f"[GEMINI] ⚠️ {modelo} falló: {mensaje[:160]}")
+                if "429" in mensaje:
+                    cuota_permanente = "limit: 0" in mensaje or "RESOURCE_EXHAUSTED" in mensaje
+                    if cuota_permanente:
+                        # Cuota del proyecto en 0 (requiere facturación): esperar no ayuda,
+                        # pasar al siguiente modelo de la cascada inmediatamente.
+                        print(f"[GEMINI] Cuota del proyecto en 0 para {modelo} (requiere facturación) — siguiente modelo...")
+                        continue
+                    # Cuota temporal por minuto: esperar y reintentar antes de cambiar de modelo
+                    print(f"[GEMINI] Cuota por minuto (429) en {modelo} — esperando 6s para reintentar...")
+                    await asyncio.sleep(6)
+                    try:
+                        client = genai.Client(api_key=GOOGLE_API_KEY)
+                        response = await client.aio.models.generate_content(
+                            model=modelo,
+                            contents=contents,
+                            config=types.GenerateContentConfig(
+                                response_modalities=["IMAGE"]
+                            )
+                        )
+                        if response.candidates and response.candidates[0].content.parts:
+                            for part in response.candidates[0].content.parts:
+                                if part.inline_data:
+                                    with open(ruta_salida, "wb") as f:
+                                        f.write(part.inline_data.data)
+                                    print(f"[GEMINI] ✅ Imagen generada con {modelo} (reintento) ({len(part.inline_data.data)//1024} KB)")
+                                    return True
+                    except Exception as e2:
+                        print(f"[GEMINI] Reintento falló en {modelo}: {str(e2)[:160]}")
+                        continue
+        
+        print(f"[GEMINI] ❌ Todos los modelos de Nano Banana fallaron. Último error: {ultimo_error}")
+        return False
 
     async def _generar_video_fal(self, prompt: str, imagen_path: str, ruta_salida: str, width: int = 1920, height: int = 1080) -> bool:
         """
@@ -1255,12 +1333,37 @@ Responde SOLO JSON:
             prompt_en = await self._traducir_prompt(prompt)
             print(f"[FAL] Prompt en inglés: {prompt_en[:80]}...")
 
-            # Lista de modelos a intentar en orden.
-            # NOTA: cada modelo tiene SU PROPIO esquema de argumentos. Solo se
-            # pasan parámetros válidos por modelo para no romper la cascada:
-            #  - WAN 2.2: soporta resolution 1080p (Full HD) y hasta 81 frames.
-            #  - LTX y Mochi: NO aceptan "resolution", se deja el default del modelo.
+            # Lista de modelos a intentar en orden (del MÁS NUEVO al más estable).
+            # 2026: se expandió el límite de ~5s → hasta ~10s por clip:
+            #  1. LTX-2.3 (fal-ai/ltx-2.3/image-to-video) — OPEN SOURCE, hasta 10s, 1080p
+            #  2. WAN 2.2 A14B (fal-ai/wan/v2.2-a14b/image-to-video) — hasta 161 frames (~10s)
+            #  3. WAN 2.2 estándar (~5s, 1080p) — respaldo
+            #  4. LTX-Video estándar (~5s) — respaldo
+            #  5. Mochi 1 (~5s) — respaldo final
             modelos = [
+                {
+                    "id": "fal-ai/ltx-2.3/image-to-video",
+                    "args": {
+                        "prompt": prompt_en,
+                        "image_url": imagen_path,
+                        "duration": 10,          # segundos (6, 8 o 10) — ¡hasta 10s!
+                        "resolution": "1080p",  # Full HD
+                        "aspect_ratio": "auto",
+                        "fps": 25,
+                        "generate_audio": False, # la narración la añade HERMATRON
+                    }
+                },
+                {
+                    "id": "fal-ai/wan/v2.2-a14b/image-to-video",
+                    "args": {
+                        "prompt": prompt_en,
+                        "image_url": imagen_path,
+                        "num_frames": 161,  # ~10 segundos a 16fps (rango válido: 17-161)
+                        "frames_per_second": 16,
+                        "resolution": "720p",
+                        "enable_safety_checker": False,
+                    }
+                },
                 {
                     "id": "fal-ai/wan/v2.2/image-to-video",
                     "args": {
@@ -1391,6 +1494,80 @@ Responde SOLO JSON:
         except Exception as e:
             print(f"[VEO] Error en generación de vídeo: {e}")
             return False
+
+    async def _generar_imagen_huggingface(self, prompt: str, ruta_salida: str, width: int = 1024, height: int = 1024, seed: int = None) -> bool:
+        """
+        Generador de imágenes OPEN SOURCE vía HuggingFace Inference API (GRATIS).
+        Usa FLUX.1-dev (Black Forest Labs) — hiperrealista, entiende instrucciones
+        complejas (3D, anime, fotorealista, etc.). Solo necesita HF_TOKEN (ya en .env).
+        No depende de la cuota de facturación de Gemini.
+        """
+        hf_token = os.getenv("HF_TOKEN", "")
+        if not hf_token:
+            print("[HF-IMAGE] Sin HF_TOKEN configurado — saltando.")
+            return False
+        
+        import httpx
+        import random
+        
+        ar = "16:9"
+        if height > width:
+            ar = "9:16"
+        elif width == height:
+            ar = "1:1"
+        
+        # FLUX.1-dev es el modelo de código abierto más realista de 2025/2026
+        # y entiende bien instrucciones de estilo (3D, anime, fotografía, etc.)
+        modelos_hf = [
+            "black-forest-labs/FLUX.1-dev",
+            "black-forest-labs/FLUX.1-schnell",
+            "stabilityai/stable-diffusion-3.5-medium",
+            "stabilityai/stable-diffusion-xl-base-1.0",
+        ]
+        
+        seed_uso = seed if seed is not None else random.randint(1, 99999)
+        headers = {"Authorization": f"Bearer {hf_token}"}
+        
+        for modelo in modelos_hf:
+            try:
+                url = f"https://api-inference.huggingface.co/models/{modelo}"
+                # FLUX usa el parámetro 'prompt'; SD usa 'inputs'
+                payload = {"inputs": prompt}
+                if "flux" in modelo:
+                    payload = {"prompt": prompt, "width": 1024, "height": 1024, "seed": seed_uso}
+                print(f"[HF-IMAGE] Intentando {modelo} (gratis, open source)...")
+                async with httpx.AsyncClient(timeout=90.0) as hc:
+                    resp = await hc.post(url, headers=headers, json=payload, timeout=90.0)
+                    
+                    if resp.status_code == 200 and resp.content and len(resp.content) > 15000:
+                        # Puede venir PNG o JPEG
+                        ext = ".png" if resp.headers.get("content-type", "") == "image/png" else ".jpg"
+                        # Guardar en la ruta pedida (respetando extensión de salida)
+                        with open(ruta_salida, "wb") as f:
+                            f.write(resp.content)
+                        print(f"[HF-IMAGE] ✅ Imagen generada con {modelo} ({len(resp.content)//1024} KB) → {ruta_salida}")
+                        return True
+                    
+                    # 503 = el modelo está cargando (primera llamada); reintentar
+                    if resp.status_code == 503:
+                        print(f"[HF-IMAGE] {modelo} cargando (503), reintentando en 15s...")
+                        await asyncio.sleep(15)
+                        try:
+                            resp2 = await hc.post(url, headers=headers, json=payload, timeout=90.0)
+                            if resp2.status_code == 200 and len(resp2.content) > 15000:
+                                with open(ruta_salida, "wb") as f:
+                                    f.write(resp2.content)
+                                print(f"[HF-IMAGE] ✅ Imagen generada con {modelo} (reintento) ({len(resp2.content)//1024} KB)")
+                                return True
+                        except Exception as e2:
+                            print(f"[HF-IMAGE] Reintento de {modelo} falló: {e2}")
+                    else:
+                        print(f"[HF-IMAGE] {modelo} → HTTP {resp.status_code}: {str(resp.text)[:120]}")
+            except Exception as e:
+                print(f"[HF-IMAGE] {modelo} error: {str(e)[:150]}")
+        
+        print("[HF-IMAGE] ❌ Todos los modelos de HuggingFace fallaron.")
+        return False
 
     async def _generar_imagen_pollinations(self, query: str, ruta_salida: str, width: int = 2560, height: int = 1440, seed: int = None) -> bool:
         """
