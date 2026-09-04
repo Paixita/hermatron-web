@@ -6,7 +6,7 @@
     <title>{{ title }}</title>
     <!-- CACHE BUSTER: v21 -->
     <link rel="stylesheet" href="/static/styles.css?v=22">
-    <link rel="stylesheet" href="/static/video-studio.css?v=21">
+    <link rel="stylesheet" href="/static/video-studio.css?v=22">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body class="studio-mode">
@@ -275,58 +275,69 @@
                             <p style="font-size:0.75rem; color:var(--texto-secundario); margin:0 0 10px 0;">Define el set de fondo para tus personajes.</p>
                             
                             <form id="formEscenario" onsubmit="guardarEscenografia(event)" style="display:flex; flex-direction:column; gap:12px;">
-                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
-                                    <label for="scName" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">📋 Nombre de Escenografía</label>
-                                    <input type="text" id="scName" required placeholder="Ej: La Tienda, El Taller de Carlos" class="input-form" style="width:100%; box-sizing:border-box; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px;">
-                                </div>
 
-                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
-                                    <label for="scDesc" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🔥 Descripción detallada para la IA</label>
-                                    <textarea id="scDesc" required placeholder="Describe las paredes, luz, ambiente, clima..." class="textarea-form" style="width:100%; box-sizing:border-box; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px; resize:vertical; min-height:80px;"></textarea>
-                                </div>
-
-                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                <!-- PASO 1: Lo esencial (obligatorio) -->
+                                <div class="esc-seccion">
+                                    <div class="esc-seccion-titulo">1️⃣ Lo esencial <span class="esc-obligatorio">Obligatorio</span></div>
                                     <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
-                                        <label for="scClima" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🌦️ Clima</label>
-                                        <select id="scClima" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
-                                            <option value="despejado" selected>Despejado</option>
-                                            <option value="lluvioso">Lluvioso</option>
-                                            <option value="nublado">Nublado</option>
-                                            <option value="neblina">Neblina</option>
-                                            <option value="soleado">Soleado</option>
-                                        </select>
+                                        <label for="scName" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">📋 ¿Cómo se llama el lugar?</label>
+                                        <input type="text" id="scName" required placeholder="Ej: La Tienda, El Taller de Carlos" class="input-form" style="width:100%; box-sizing:border-box; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px;">
+                                        <small style="color: var(--texto-secundario); opacity:0.8; font-size:0.68rem;">Un nombre corto y fácil de recordar. Ej: “La Tienda”</small>
                                     </div>
                                     <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
-                                        <label for="scHora" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">⏰ Hora</label>
-                                        <select id="scHora" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
-                                            <option value="dia" selected>Día</option>
-                                            <option value="noche">Noche</option>
-                                            <option value="atardecer">Atardecer</option>
-                                            <option value="amanecer">Amanecer</option>
-                                        </select>
+                                        <label for="scDesc" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🔥 ¿Cómo se ve el lugar? (para la IA)</label>
+                                        <textarea id="scDesc" required placeholder="Ej: paredes de ladrillo, luz cálida, olor a café, tarde lluviosa..." class="textarea-form" style="width:100%; box-sizing:border-box; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px 12px; border-radius: 6px; resize:vertical; min-height:80px;"></textarea>
+                                        <small style="color: var(--texto-secundario); opacity:0.8; font-size:0.68rem;">Describe colores, luz, ambiente y detalles. Así la IA lo dibuja igual en todas tus escenas.</small>
                                     </div>
                                 </div>
 
-                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
-                                    <label for="scSuelo" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🪨 Suelo</label>
-                                    <select id="scSuelo" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
-                                        <option value="asfalto" selected>Asfalto/Pavimento</option>
-                                        <option value="empedrado">Empedrado</option>
-                                        <option value="tierra">Tierra</option>
-                                        <option value="cemento">Cemento</option>
-                                        <option value="baldosas">Baldosas</option>
-                                    </select>
+                                <!-- PASO 2: Ambiente (opcional) -->
+                                <div class="esc-seccion">
+                                    <div class="esc-seccion-titulo">2️⃣ Ambiente <span class="esc-opcional">Opcional</span></div>
+                                    <p style="font-size:0.7rem; color:var(--texto-secundario); margin:0 0 8px 0;">Si no eliges nada, la IA decide lo que mejor quede.</p>
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                                        <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                            <label for="scClima" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🌦️ Clima</label>
+                                            <select id="scClima" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
+                                                <option value="despejado" selected>Despejado</option>
+                                                <option value="lluvioso">Lluvioso</option>
+                                                <option value="nublado">Nublado</option>
+                                                <option value="neblina">Neblina</option>
+                                                <option value="soleado">Soleado</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                            <label for="scHora" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">⏰ Hora</label>
+                                            <select id="scHora" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
+                                                <option value="dia" selected>Día</option>
+                                                <option value="noche">Noche</option>
+                                                <option value="atardecer">Atardecer</option>
+                                                <option value="amanecer">Amanecer</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
+                                        <label for="scSuelo" style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">🪨 Suelo</label>
+                                        <select id="scSuelo" class="select-form" style="background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 8px; border-radius: 6px; cursor:pointer;">
+                                            <option value="asfalto" selected>Asfalto/Pavimento</option>
+                                            <option value="empedrado">Empedrado</option>
+                                            <option value="tierra">Tierra</option>
+                                            <option value="cemento">Cemento</option>
+                                            <option value="baldosas">Baldosas</option>
+                                        </select>
+                                    </div>
                                 </div>
 
-                                <div class="form-group" style="display: flex; flex-direction: column; gap: 5px;">
-                                    <label style="font-size: 0.8rem; font-weight: 600; color: var(--texto-secundario);">📸 Imagen de Referencia</label>
+                                <!-- PASO 3: Imagen (opcional) -->
+                                <div class="esc-seccion">
+                                    <div class="esc-seccion-titulo">3️⃣ Imagen de referencia <span class="esc-opcional">Opcional</span></div>
+                                    <p style="font-size:0.7rem; color:var(--texto-secundario); margin:0 0 8px 0;">Ayuda a la IA a dibujar el lugar igual. Puedes subir una foto o crearla con IA.</p>
                                     <input type="file" id="scImage" accept="image/*" class="input-form" style="font-size:0.75rem; background: var(--fondo-terciario); color: var(--texto); border: 1px solid var(--borde); padding: 6px 12px; border-radius: 6px;">
-                                </div>
-
-                                <div class="ai-generator-panel">
-                                    <span>💡 ¿No tienes imagen? Genérala con IA gratis:</span>
-                                    <img id="previewGenImg" class="preview-gen-image" src="" alt="Fondo generado">
-                                    <button type="button" class="btn-gen-ai" id="btnGenFondo" onclick="preGenerarFondoIA()">🎨 Pre-generar con IA</button>
+                                    <div class="ai-generator-panel" style="margin-top:8px;">
+                                        <span>💡 ¿No tienes imagen? La creamos gratis:</span>
+                                        <img id="previewGenImg" class="preview-gen-image" src="" alt="Fondo generado">
+                                        <button type="button" class="btn-gen-ai" id="btnGenFondo" onclick="preGenerarFondoIA()">🎨 Generar imagen con IA</button>
+                                    </div>
                                 </div>
 
                                 <button type="submit" class="btn btn-primary" style="margin-top:10px; padding:12px; font-weight:700; width:100%;">💾 Guardar Escenario</button>

@@ -294,3 +294,46 @@
 .btn-gen-ai:hover {
     opacity: 0.9;
 }
+
+/* ===== Formulario de Escenario por pasos ===== */
+.esc-seccion {
+    background: rgba(255,255,255,0.015);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.esc-seccion-titulo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #fff;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.esc-obligatorio {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    font-size: 0.62rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+}
+.esc-opcional {
+    background: rgba(111, 66, 193, 0.2);
+    color: #c4b5fd;
+    font-size: 0.62rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+}
+.esc-seccion small {
+    display: block;
+    line-height: 1.35;
+}
