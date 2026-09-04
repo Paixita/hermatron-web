@@ -306,13 +306,62 @@ def _ejecutar_comando_windows_no_bloqueante(comando: str) -> dict:
 # ==========================================
 # EL LAVADO DE CEREBRO (PROMPT ESTRICTO)
 # ==========================================
-# HERMATRON debe saber en qué sistema operativo corre para usar los comandos correctos
-# (evita errores tipo 'ver' en Linux o 'uname' en Windows).
-PLATAFORMA_ACTUAL = {
-    "linux": "Linux (Ubuntu/Debian). Usa comandos POSIX: uname -a, ls, pwd, cat, whoami, free -h. NUNCA uses 'ver', 'dir' ni 'systeminfo'.",
-    "darwin": "macOS. Usa comandos POSIX: uname -a, ls, pwd, cat, sw_vers.",
-    "nt": "Windows. Usa comandos CMD: ver, dir, systeminfo, whoami. El handler ya lanza apps GUI sin bloquear.",
-}.get(sys.platform if hasattr(sys, 'platform') else "linux", "Sistema operativo desconocido. Prueba primero con 'uname -a' o 'ver' para detectarlo.")
+def _detectar_plataforma() -> str:
+    """Detecta el sistema operativo REAL donde corre HERMATRON sin asumir nada.
+    Soporta: Windows, macOS y CUALQUIER distribución de Linux (Ubuntu, Fedora,
+    Debian, Arch, Mint, etc.) leyendo /etc/os-release cuando existe.
+    """
+    import platform as _platform
+    
+    sistema = _platform.system() or ""
+    
+    # ── Windows ──
+    if sistema == "Windows" or sys.platform.startswith("win"):
+        version = _platform.release() or ""
+        return (
+            f"Windows ({version}). Usa comandos CMD: ver, dir, systeminfo, whoami. "
+            "NUNCA uses 'uname', 'ls', 'pwd' ni 'cat' (son de Linux/macOS). "
+            "El handler ya lanza apps GUI sin bloquear."
+        )
+    
+    # ── macOS ──
+    if sistema == "Darwin" or sys.platform == "darwin":
+        version = _platform.mac_ver()[0] or ""
+        return (
+            f"macOS ({version}). Usa comandos POSIX: uname -a, ls, pwd, cat, sw_vers, whoami. "
+            "NUNCA uses 'ver', 'dir' ni 'systeminfo' (son de Windows)."
+        )
+    
+    # ── Linux (cualquier distribución) ──
+    if sistema == "Linux" or sys.platform.startswith("linux"):
+        distro = ""
+        # Leer /etc/os-release: identifica Ubuntu, Fedora, Debian, Arch, Mint, etc.
+        try:
+            with open("/etc/os-release", "r", encoding="utf-8") as f:
+                for linea in f:
+                    if linea.startswith("PRETTY_NAME="):
+                        distro = linea.split("=", 1)[1].strip().strip('"').strip("'")
+                        break
+        except Exception:
+            pass
+        if not distro:
+            distro = _platform.libc_ver()[0] or "Linux"
+        return (
+            f"Linux — distribución: {distro}. Usa comandos POSIX: uname -a, ls, pwd, cat, whoami, free -h. "
+            "Para saber la distribución exacta ejecuta: cat /etc/os-release o lsb_release -a. "
+            "NUNCA uses 'ver', 'dir' ni 'systeminfo' (son de Windows). "
+            "NO asumas que es Ubuntu: comprueba /etc/os-release antes de afirmar la distribución."
+        )
+    
+    # ── Otro / desconocido ──
+    return (
+        f"Sistema desconocido (platform.system()={sistema!r}). "
+        "Detéctalo ANTES de responder ejecutando con la herramienta de comandos: "
+        "en Windows 'ver', en macOS/Linux 'uname -a'."
+    )
+
+
+PLATAFORMA_ACTUAL = _detectar_plataforma()
 
 SYSTEM_PROMPT = f"""Eres HERMATRON, un Estudio de Inteligencia Artificial Multimodal y Asistente Creativo.
 PLATAFORMA DEL SISTEMA DONDE CORRES AHORA MISMO: {PLATAFORMA_ACTUAL}
