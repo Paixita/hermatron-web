@@ -33,11 +33,12 @@ async function cargarEscenografias() {
             const card = document.createElement('div');
             card.className = 'card-escenario';
 
-            const photoUrl = esc.imagen_path || 'https://via.placeholder.com/300x160?text=🏞️+Sin+Imagen';
+            const photoUrl = esc.imagen_path || "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs><rect width="300" height="160" fill="url(#g)"/><text x="150" y="92" font-family="sans-serif" font-size="20" fill="rgba(255,255,255,0.9)" text-anchor="middle">🏞️</text></svg>');
 
             card.innerHTML = `
                 <div class="card-img-wrap">
-                    <img class="card-img" src="${photoUrl}" onerror="this.src='https://via.placeholder.com/300x160?text=🏞️+Escenario'">
+                    <img class="card-img" src="${photoUrl}" onerror="this.style.display='none'">
                     <div class="card-labels">
                         <span class="badge-tag">🌦️ ${esc.clima.toUpperCase()}</span>
                         <span class="badge-tag">⏰ ${esc.hora_dia.toUpperCase()}</span>

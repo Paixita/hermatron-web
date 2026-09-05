@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
-    <!-- CACHE BUSTER: v21 -->
-    <link rel="stylesheet" href="/static/styles.css?v=22">
-    <link rel="stylesheet" href="/static/video-studio.css?v=22">
+    <!-- CACHE BUSTER: v24 -->
+    <link rel="stylesheet" href="/static/styles.css?v=24">
+    <link rel="stylesheet" href="/static/video-studio.css?v=24">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body class="studio-mode">
@@ -21,44 +21,86 @@
                 </div>
             </a>
             
+            <div class="studio-status" id="studioStatus" title="Estado del servidor">
+                <span class="status-dot" id="connectionStatus"></span>
+                <span id="statusText" class="status-text">Conectando...</span>
+            </div>
+
             <div class="studio-actions-top">
-                <a href="#scenographyManagerContainer" class="btn btn-secondary" style="scroll-behavior: smooth;">🏞️ Escenarios</a>
-                <a href="/" class="btn btn-nav">💬 Chat</a>
-                <button class="btn btn-secondary" onclick="document.getElementById('fileImportVideo').click()">📂 Importar</button>
+                <a href="#scenographyManagerContainer" class="btn btn-secondary studio-btn" style="scroll-behavior: smooth;">
+                    <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    Escenarios
+                </a>
+                <a href="/" class="btn btn-nav studio-btn">
+                    <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Chat
+                </a>
+                <button class="btn btn-secondary studio-btn" onclick="document.getElementById('fileImportVideo').click()">
+                    <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Importar
+                </button>
                 <input type="file" id="fileImportVideo" accept="video/*" style="display:none" onchange="importarVideoLocalStudio(this.files[0])">
-                <button class="btn btn-warning btn-sm" onclick="limpiarCache()">🧹 Caché</button>
-                <button class="btn btn-secondary btn-sm" onclick="limpiarGaleria()">🗑️ Limpiar</button>
+                <button class="btn btn-warning btn-sm studio-btn" onclick="limpiarCache()">
+                    <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Caché
+                </button>
+                <button class="btn btn-secondary btn-sm studio-btn" onclick="limpiarGaleria()">
+                    <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    Limpiar
+                </button>
             </div>
         </nav>
 
         <div class="studio-layout">
             <!-- Columna Izquierda: Formulario -->
             <aside class="studio-sidebar">
-                <div class="sidebar-section">
-                    <h3>🎬 Crear Nuevo Video</h3>
+                <div class="studio-sidebar-head">
+                    <span class="sidebar-head-badge">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                    </span>
+                    <div>
+                        <h3>Crear Nuevo Video</h3>
+                        <p class="sidebar-head-sub">Cuéntale tu idea a HERMATRON</p>
+                    </div>
+                </div>
+
+                <div class="paso-card">
+                    <div class="paso-titulo">
+                        <span class="paso-num">1</span> Tu idea
+                        <span class="paso-tag oblig">Obligatorio</span>
+                    </div>
 
                     <div class="form-group">
-                        <label for="videoTema">📋 Tema del Video</label>
+                        <label for="videoTema">Tema del video</label>
                         <input type="text" id="videoTema" placeholder="Ej: Comercial de Coca-Cola" class="input-form">
                     </div>
 
                     <div class="form-group">
-                        <label for="videoPrompt">🔥 Descripción y Escenas</label>
+                        <label for="videoPrompt">Descripción y escenas</label>
                         <textarea id="videoPrompt" placeholder="Describe detalladamente lo que quieres ver..." class="textarea-form"></textarea>
+                    </div>
+                </div>
+
+                <div class="paso-card">
+                    <div class="paso-titulo">
+                        <span class="paso-num">2</span> Formato y movimiento
+                        <span class="paso-tag oblig">Obligatorio</span>
                     </div>
 
                     <div class="form-group">
-                        <label>📐 Formato del Video</label>
+                        <label>Formato del video</label>
                         <div class="ratio-selector">
                             <label class="ratio-option">
                                 <input type="radio" name="ratio" value="16:9" checked onchange="actualizarRatioPreview()">
-                                <div class="ratio-box ratio-16-9">
+                                <div class="ratio-box">
+                                    <span class="ratio-mini ratio-mini-16">▬</span>
                                     <span>16:9 YouTube</span>
                                 </div>
                             </label>
                             <label class="ratio-option">
                                 <input type="radio" name="ratio" value="9:16" onchange="actualizarRatioPreview()">
-                                <div class="ratio-box ratio-9-16">
+                                <div class="ratio-box">
+                                    <span class="ratio-mini ratio-mini-9">▯</span>
                                     <span>9:16 Shorts/Reels</span>
                                 </div>
                             </label>
@@ -66,54 +108,64 @@
                     </div>
 
                     <div class="form-group">
-                        <label>🎥 Modo de Video</label>
+                        <label>Modo de video</label>
                         <div class="modo-video-selector" style="display:flex; flex-direction:column; gap:6px;">
                             <label class="ratio-option">
                                 <input type="radio" name="modoVideo" value="auto" checked>
-                                <div class="ratio-box" style="padding:8px 12px;">
-                                    <span>⚙️ Auto (usa lo mejor disponible: fal.ai → HuggingFace → Ken Burns)</span>
+                                <div class="ratio-box modo-box">
+                                    <span class="modo-ic">✦</span>
+                                    <span><strong>Auto</strong> — usa lo mejor disponible: fal.ai → HuggingFace → Ken Burns</span>
                                 </div>
                             </label>
                             <label class="ratio-option">
                                 <input type="radio" name="modoVideo" value="presentacion">
-                                <div class="ratio-box" style="padding:8px 12px;">
-                                    <span>🎞️ Presentación con movimiento de cámara (GRATIS)</span>
+                                <div class="ratio-box modo-box">
+                                    <span class="modo-ic">🎞️</span>
+                                    <span><strong>Presentación</strong> — movimiento de cámara sobre imágenes (GRATIS)</span>
                                 </div>
                             </label>
                             <label class="ratio-option">
                                 <input type="radio" name="modoVideo" value="gratis">
-                                <div class="ratio-box" style="padding:8px 12px;">
-                                    <span>🤖 IA Gratis (Mochi HuggingFace, sin fal.ai)</span>
+                                <div class="ratio-box modo-box">
+                                    <span class="modo-ic">🤖</span>
+                                    <span><strong>IA Gratis</strong> — Mochi HuggingFace, sin fal.ai</span>
                                 </div>
                             </label>
                             <label class="ratio-option">
                                 <input type="radio" name="modoVideo" value="fal">
-                                <div class="ratio-box" style="padding:8px 12px;">
-                                    <span>💎 Movimiento IA Premium (fal.ai WAN/LTX)</span>
+                                <div class="ratio-box modo-box">
+                                    <span class="modo-ic">💎</span>
+                                    <span><strong>Movimiento Premium</strong> — fal.ai WAN/LTX</span>
                                 </div>
                             </label>
                         </div>
                     </div>
+                </div>
+
+                <div class="paso-card">
+                    <div class="paso-titulo">
+                        <span class="paso-num">3</span> Sonido
+                        <span class="paso-tag opc">Opcional</span>
+                    </div>
 
                     <div class="form-group">
                         <div class="switch-group">
-                            <label>🔊 Narración por Voz IA</label>
+                            <label>Narración por voz IA</label>
                             <label class="switch">
                                 <input type="checkbox" id="checkNarracion" checked>
                                 <span class="slider round"></span>
                             </label>
                         </div>
                         
-                        <details id="vozSelectorDetails" class="voz-selector-details" style="margin-top: 10px; border: 1px solid var(--borde); border-radius: 8px; padding: 10px; background: var(--fondo-terciario);">
+                        <details id="vozSelectorDetails" class="voz-selector-details" style="margin-top: 10px; border: 1px solid var(--borde); border-radius: 10px; padding: 10px; background: rgba(255,255,255,0.02);">
                             <summary class="voz-selector-summary" style="cursor: pointer; font-weight: 600; color: var(--texto); display: flex; align-items: center; justify-content: space-between;">
-                                <span>🗣️ Opciones de Voz</span>
+                                <span>🗣️ Opciones de voz</span>
                                 <span class="triangle" style="font-size: 0.8rem;">▼</span>
                             </summary>
                             <div id="vozSelector" class="voz-selector-container" style="margin-top: 15px;">
                                 <p class="small-label">Escoge la voz para el video:</p>
                                 <input type="hidden" id="vozSeleccionada" value="es-CO-GonzaloNeural">
                                 <div id="vozLista" class="voz-lista-scroll">
-                                    <!-- Voces disponibles -->
                                     <div class="voz-item activo" data-voz="es-CO-GonzaloNeural" onclick="seleccionarVoz('es-CO-GonzaloNeural')">
                                         <div class="voz-item-info">
                                             <span class="voz-item-nombre">🇨🇴 Gonzalo (Claro)</span>
@@ -162,8 +214,8 @@
                     </div>
 
                     <div class="form-group" style="margin-top: 15px; margin-bottom: 20px;">
-                        <label>🎵 Música de Fondo</label>
-                        <div class="music-selector-container" style="display: flex; gap: 10px; align-items: center; background: var(--fondo-terciario); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--borde);">
+                        <label>Música de fondo</label>
+                        <div class="music-selector-container" style="display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--borde);">
                             <input type="file" id="bgmFileInput" accept="audio/*" style="display:none" onchange="subirMusicaDeFondo(this.files[0])">
                             <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('bgmFileInput').click()" style="padding: 4px 8px; font-size: 0.8rem;">📤 Subir Audio</button>
                             <span id="bgmFileName" style="font-size: 0.85rem; color: var(--texto-secundario); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Sin música</span>
@@ -171,11 +223,12 @@
                             <input type="hidden" id="bgmPathSelected" value="">
                         </div>
                     </div>
-
-                    <button class="btn btn-primary btn-crear-video-studio" onclick="crearVideoDesdeStudio()">
-                        🚀 Crear Video Profesional
-                    </button>
                 </div>
+
+                <button class="btn btn-primary btn-crear-video-studio">
+                    <svg class="ic" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    Crear Video Profesional
+                </button>
 
                 <div class="sidebar-tips">
                     <p>💡 <strong>Tip:</strong> Describe los colores, el tipo de cámara (macro, dron) y la emoción para un video increíble.</p>
@@ -200,20 +253,30 @@
                 <!-- Barra de Progreso (Visible solo al crear) -->
                 <div id="studioProgreso" class="studio-progress-overlay" style="display:none">
                     <div class="progress-card">
-                        <div class="spinner"></div>
-                        <div class="progress-info">
-                            <p id="progresoEstado">🧠 Analizando tema...</p>
-                            <!-- Timeline de fases del pipeline (CapCut-style) -->
-                            <div id="progresoFases" class="progreso-fases" style="margin: 14px 0 6px 0;"></div>
-                            <div class="progress-bar-wrap">
-                                <div id="progresoFill" class="progress-bar-fill"></div>
+                        <div class="progress-card-glow"></div>
+                        <div class="progress-card-header">
+                            <span class="progress-logo">H</span>
+                            <div>
+                                <h4>HERMATRON está creando tu video</h4>
+                                <p>El Director de Cine IA organiza cada escena...</p>
                             </div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-                                <span id="progresoPorcentaje">0%</span>
-                                <span id="progresoTimer" style="font-size:0.8rem; color:var(--texto-secundario); font-family:monospace;">⏱️ 0:00</span>
+                        </div>
+                        <div class="progress-card-body">
+                            <div class="spinner"></div>
+                            <div class="progress-info">
+                                <p id="progresoEstado">🧠 Analizando tema...</p>
+                                <!-- Timeline de fases del pipeline (CapCut-style) -->
+                                <div id="progresoFases" class="progreso-fases" style="margin: 14px 0 6px 0;"></div>
+                                <div class="progress-bar-wrap">
+                                    <div id="progresoFill" class="progress-bar-fill"></div>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                                    <span id="progresoPorcentaje">0%</span>
+                                    <span id="progresoTimer" style="font-size:0.8rem; color:var(--texto-secundario); font-family:monospace;">⏱️ 0:00</span>
+                                </div>
+                                <!-- Detalle de sub-fase (ej: Imagen 2 de 5) -->
+                                <div id="progresoDetalle" style="margin-top:6px; font-size:0.85rem; color:#9db8ff;"></div>
                             </div>
-                            <!-- Detalle de sub-fase (ej: Imagen 2 de 5) -->
-                            <div id="progresoDetalle" style="margin-top:6px; font-size:0.85rem; color:#9db8ff;"></div>
                         </div>
                     </div>
                 </div>
@@ -222,7 +285,9 @@
                     <!-- Parte Izquierda: Video / Placeholder -->
                     <div class="studio-preview-area">
                         <div id="previewPlaceholder" class="preview-placeholder">
-                            <div class="placeholder-icon">🎬</div>
+                            <div class="placeholder-icon">
+                                <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                            </div>
                             <p>Ingresa los datos a la izquierda y pulsa <strong>Crear Video</strong></p>
                             <p class="small">El video aparecerá aquí cuando esté listo.</p>
                         </div>
@@ -232,9 +297,15 @@
                                 <div class="spinner-small"></div>
                                 <span>Cargando video...</span>
                             </div>
-                            <video id="previewVideo" class="video-player" controls preload="auto">
-                                Tu navegador no soporta videos.
-                            </video>
+                            <div class="preview-video-header">
+                                <span id="previewVideoTitle" class="preview-video-title">Cargando...</span>
+                            </div>
+                            <div class="preview-video-frame">
+                                <span id="pauseOverlayIcon" class="pause-overlay-icon" onclick="togglePausePreview()">▶️</span>
+                                <video id="previewVideo" class="video-player" controls preload="auto">
+                                    Tu navegador no soporta videos.
+                                </video>
+                            </div>
                         </div>
 
                         <div id="previewActions" class="preview-actions-bar" style="display:none">
@@ -449,6 +520,6 @@
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <script src="/static/video-studio.js?v=22"></script>
+    <script src="/static/video-studio.js?v=24"></script>
 </body>
 </html>

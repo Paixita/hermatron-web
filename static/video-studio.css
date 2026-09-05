@@ -337,3 +337,591 @@
     display: block;
     line-height: 1.35;
 }
+
+/* ================================================================
+   HERMATRON STUDIO v2 — Rediseño profesional (2026-09)
+   Sobrescribe estilos base SOLO dentro del Estudio.
+   No toca lógica: todas las clases/IDs funcionales se conservan.
+   ================================================================ */
+
+/* ---------- Barra superior: cristal + estado en vivo ---------- */
+.studio-topbar {
+    background: rgba(15, 15, 22, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(139, 92, 246, 0.18);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.03), 0 8px 30px rgba(0,0,0,0.35);
+}
+
+.studio-logo .logo-h {
+    background: linear-gradient(135deg, #8b5cf6 0%, #5e6ad2 55%, #4338ca 100%);
+    border-radius: 12px;
+    box-shadow: 0 0 22px rgba(124, 77, 255, 0.45), inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+.studio-status {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.8rem;
+    color: #e4e4e7;
+    background: rgba(255,255,255,0.045);
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.09);
+    backdrop-filter: blur(6px);
+}
+
+.studio-status .status-text {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    letter-spacing: 0.2px;
+}
+
+.status-dot.connected {
+    background: #10b981;
+    box-shadow: 0 0 10px #10b981, 0 0 2px #10b981;
+}
+
+.status-dot.disconnected {
+    background: #ef4444;
+    box-shadow: 0 0 10px #ef4444;
+}
+
+.studio-actions-top .studio-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border-radius: 9px;
+    padding: 7px 12px;
+    transition: all 0.2s ease;
+}
+
+.studio-actions-top .studio-btn .ic {
+    opacity: 0.9;
+}
+
+.studio-actions-top .studio-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(139, 92, 246, 0.5);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+
+/* ---------- Barra lateral: encabezado + pasos numerados ---------- */
+.studio-sidebar {
+    background: #0e0e14;
+    padding: 20px 18px 30px;
+}
+
+.studio-sidebar-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 14px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(94,106,210,0.05));
+    border: 1px solid rgba(139,92,246,0.22);
+    border-radius: 14px;
+}
+
+.studio-sidebar .studio-sidebar-head h3 {
+    margin: 0;
+    padding: 0;
+    font-size: 1.02rem;
+    letter-spacing: 0.3px;
+    cursor: default;
+}
+
+.studio-sidebar .studio-sidebar-head h3:hover {
+    background: transparent;
+    transform: none;
+}
+
+.sidebar-head-sub {
+    font-size: 0.72rem;
+    color: #8b8b96;
+    margin-top: 2px;
+}
+
+.sidebar-head-badge {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c4b5fd;
+    background: linear-gradient(135deg, #6d28d9, #4338ca);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(109, 40, 217, 0.45), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.paso-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 15px 16px;
+    margin-bottom: 14px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.paso-card:hover {
+    border-color: rgba(139, 92, 246, 0.28);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+}
+
+.paso-titulo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #f4f4f5;
+    margin-bottom: 13px;
+    letter-spacing: 0.3px;
+}
+
+.paso-num {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(135deg, #8b5cf6, #5e6ad2);
+    border-radius: 7px;
+    box-shadow: 0 2px 8px rgba(124, 77, 255, 0.4);
+}
+
+.paso-tag {
+    margin-left: auto;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    text-transform: uppercase;
+}
+
+.paso-tag.oblig {
+    background: rgba(239, 68, 68, 0.14);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.paso-tag.opc {
+    background: rgba(139, 92, 246, 0.16);
+    color: #c4b5fd;
+    border: 1px solid rgba(139, 92, 246, 0.28);
+}
+
+.studio-sidebar .form-group label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 6px;
+    display: block;
+}
+
+.input-form, .textarea-form {
+    border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.09);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.input-form:focus, .textarea-form:focus {
+    border-color: rgba(139, 92, 246, 0.65);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15), 0 0 24px rgba(124, 77, 255, 0.12);
+    background: rgba(255,255,255,0.045);
+}
+
+/* ---------- Selectores de formato y modo ---------- */
+.ratio-box {
+    background: rgba(255,255,255,0.025);
+    border: 1.5px solid rgba(255,255,255,0.09);
+    border-radius: 12px;
+    padding: 12px;
+    gap: 8px;
+}
+
+.ratio-option input:checked + .ratio-box {
+    border-color: #8b5cf6;
+    background: linear-gradient(135deg, rgba(139,92,246,0.16), rgba(94,106,210,0.06));
+    box-shadow: 0 0 22px rgba(139, 92, 246, 0.22), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.ratio-mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 30px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #8b5cf6;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+}
+
+.modo-box {
+    flex-direction: row;
+    align-items: flex-start;
+    text-align: left;
+    padding: 9px 12px;
+    gap: 9px;
+}
+
+.modo-ic {
+    font-size: 0.95rem;
+    flex-shrink: 0;
+    line-height: 1.2;
+    filter: drop-shadow(0 0 6px rgba(139,92,246,0.5));
+}
+
+.ratio-box span {
+    line-height: 1.35;
+}
+
+/* ---------- Botón principal ---------- */
+.btn-crear-video-studio {
+    width: 100%;
+    padding: 14px 18px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #8b5cf6 0%, #5e6ad2 60%, #4338ca 100%);
+    border: 1px solid rgba(167, 139, 250, 0.4);
+    box-shadow: 0 8px 26px rgba(109, 40, 217, 0.4), inset 0 1px 0 rgba(255,255,255,0.22);
+    transition: all 0.25s ease;
+}
+
+.btn-crear-video-studio:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(109, 40, 217, 0.55), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+
+.btn-crear-video-studio:disabled {
+    opacity: 0.75;
+    transform: none;
+    cursor: wait;
+}
+
+.sidebar-tips {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(94, 106, 210, 0.08);
+    border: 1px dashed rgba(139, 92, 246, 0.35);
+}
+
+.sidebar-tips p {
+    font-size: 0.78rem;
+    color: #b8b8c4;
+    line-height: 1.5;
+}
+
+.sidebar-tips strong { color: #e9e9ef; }
+
+/* ---------- Cabecera de vista previa ---------- */
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    padding: 4px 2px;
+}
+
+.preview-header h2 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    color: #f4f4f5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.badge-ratio {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 13px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: #c4b5fd;
+    background: rgba(139, 92, 246, 0.14);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 14px rgba(139, 92, 246, 0.15);
+}
+
+/* ---------- Área de video / placeholder ---------- */
+.studio-content-layout {
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+}
+
+.studio-preview-area {
+    background: radial-gradient(ellipse at top, rgba(94,106,210,0.06), rgba(5,5,7,0.9) 55%);
+}
+
+.preview-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 100%;
+    min-height: 380px;
+    text-align: center;
+    border: 1.5px dashed rgba(139, 92, 246, 0.28);
+    border-radius: 16px;
+    background: rgba(255,255,255,0.012);
+}
+
+.placeholder-icon {
+    width: 86px;
+    height: 86px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 26px;
+    color: #c4b5fd;
+    background: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(94,106,210,0.1));
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    box-shadow: 0 0 40px rgba(124, 77, 255, 0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    margin-bottom: 6px;
+    animation: iconFloat 3.2s ease-in-out infinite;
+}
+
+@keyframes iconFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.preview-placeholder p {
+    color: #c8c8d2;
+    font-size: 0.92rem;
+}
+
+.preview-placeholder p.small {
+    font-size: 0.78rem;
+    color: #7c7c88;
+}
+
+.preview-video-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+}
+
+.preview-video-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #f4f4f5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-video-frame {
+    position: relative;
+    border-radius: 0 0 14px 14px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: #000;
+}
+
+.preview-video-frame .video-player {
+    max-height: none;
+    aspect-ratio: 16 / 9;
+    display: block;
+}
+
+.pause-overlay-icon {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 5;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,255,255,0.22);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pause-overlay-icon:hover {
+    transform: scale(1.12);
+    background: rgba(139, 92, 246, 0.5);
+}
+
+.preview-actions-bar {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+}
+
+/* ---------- Panel de progreso (creación) ---------- */
+.studio-progress-overlay {
+    background: rgba(4, 4, 8, 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.progress-card {
+    position: relative;
+    background: linear-gradient(160deg, #14141c, #0d0d13);
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    border-radius: 22px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 30px 90px rgba(0,0,0,0.9), 0 0 60px rgba(124, 77, 255, 0.12);
+    width: 560px;
+    max-width: 92vw;
+}
+
+.progress-card-glow {
+    position: absolute;
+    top: -90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 420px;
+    height: 200px;
+    background: radial-gradient(closest-side, rgba(139, 92, 246, 0.35), transparent);
+    pointer-events: none;
+}
+
+.progress-card-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 20px 24px;
+    background: rgba(139, 92, 246, 0.08);
+    border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.progress-logo {
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    font-weight: 900;
+    color: #fff;
+    background: linear-gradient(135deg, #8b5cf6, #4338ca);
+    border-radius: 12px;
+    box-shadow: 0 4px 18px rgba(109, 40, 217, 0.5), inset 0 1px 0 rgba(255,255,255,0.25);
+    animation: pulseLogo 2.4s ease-in-out infinite;
+}
+
+@keyframes pulseLogo {
+    0%, 100% { box-shadow: 0 4px 18px rgba(109,40,217,0.5); }
+    50% { box-shadow: 0 4px 26px rgba(139,92,246,0.85); }
+}
+
+.progress-card-header h4 {
+    font-size: 1.02rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 0.3px;
+}
+
+.progress-card-header p {
+    font-size: 0.75rem;
+    color: #9d9daa;
+    margin-top: 2px;
+}
+
+.progress-card-body {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 26px 24px 30px;
+    text-align: left;
+}
+
+.progress-card-body .spinner {
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+
+.progress-card-body .progress-info {
+    flex: 1;
+}
+
+.progress-card-body #progresoEstado {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #eaeaef;
+    line-height: 1.45;
+}
+
+/* ---------- Secciones storyboard / escenarios ---------- */
+.storyboard-bottom-section {
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.45);
+}
+
+.sc-section-header {
+    background: linear-gradient(135deg, rgba(20,20,26,0.9), rgba(17,13,36,0.9));
+    border-bottom: 1px solid rgba(139, 92, 246, 0.18);
+}
+
+.sc-section-header h3 { letter-spacing: 0.4px; }
+
+/* ---------- Biblioteca (galería derecha) ---------- */
+.studio-gallery {
+    background: #0e0e14;
+}
+
+.studio-gallery h3 {
+    border-radius: 10px;
+}
+
+.gallery-stats .stat-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+}
+
+/* ---------- Scrollbar del sidebar ---------- */
+.studio-sidebar::-webkit-scrollbar { width: 7px; }
+.studio-sidebar::-webkit-scrollbar-track { background: transparent; }
+.studio-sidebar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(139,92,246,0.5), rgba(94,106,210,0.35));
+    border-radius: 10px;
+}

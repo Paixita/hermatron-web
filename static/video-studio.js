@@ -21,6 +21,22 @@ const VOCES = [
     { id: 'es-MX-LupeNeural', nombre: 'Lupe (Natural)', flag: '🇲🇽', region: 'México' },
 ];
 
+// Placeholders locales (SVG) — funcionan sin internet, a diferencia de via.placeholder.com
+const AVATAR_PLACEHOLDER = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">' +
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs>' +
+    '<rect width="200" height="200" fill="url(#g)"/>' +
+    '<circle cx="100" cy="78" r="34" fill="rgba(255,255,255,0.9)"/>' +
+    '<path d="M40 185c4-42 28-62 60-62s56 20 60 62z" fill="rgba(255,255,255,0.9)"/></svg>');
+const IMAGEN_PLACEHOLDER = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600">' +
+    '<defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="#1a1a2e"/><stop offset="1" stop-color="#0d0d16"/></linearGradient></defs>' +
+    '<rect width="400" height="600" fill="url(#b)"/>' +
+    '<text x="200" y="280" font-family="sans-serif" font-size="22" fill="#8b8b9e" text-anchor="middle">🎬</text>' +
+    '<text x="200" y="330" font-family="sans-serif" font-size="17" fill="#6b6b7e" text-anchor="middle">Generando imagen...</text></svg>');
+
 // Variable global para detener audios previos
 let audioMuestraActual = null;
 let pollingInterval = null;
@@ -197,45 +213,6 @@ function configurarRatio(ratio) {
         btn.classList.toggle('active', btn.dataset.ratio === ratio);
     });
     document.getElementById('previewRatioBadge').textContent = ratio;
-}
-
-async function cargarVideoPreview(videoId) {
-    const player = document.getElementById('previewVideo');
-    const container = document.getElementById('previewVideoWrap');
-    const placeholder = document.getElementById('previewPlaceholder');
-    const loading = document.getElementById('previewLoading');
-    const title = document.getElementById('previewVideoTitle');
-
-    if (!player || !container) return;
-
-    placeholder.style.display = 'none';
-    loading.style.display = 'flex';
-
-    try {
-        const infoRes = await fetch(`/api/video/info/${videoId}`);
-        if (!infoRes.ok) throw new Error('Video no encontrado');
-        const info = await infoRes.json();
-
-        player.src = `/video_files/${info.archivo}`;
-        player.load();
-        title.textContent = info.titulo || 'Video sin título';
-
-        player.onloadeddata = () => {
-            loading.style.display = 'none';
-            container.style.display = 'block';
-            player.play().catch(() => {});
-        };
-
-        player.onerror = () => {
-            loading.style.display = 'none';
-            showToast('Error cargando video', 'error');
-        };
-
-    } catch (e) {
-        loading.style.display = 'none';
-        console.error("Error cargando preview:", e);
-        showToast('No se pudo cargar el video', 'error');
-    }
 }
 
 function togglePausePreview() {
@@ -662,6 +639,7 @@ async function cargarVideoPreview(proyectoId) {
 
         // Info (null-safe: algunos templates no tienen estas etiquetas)
         const setTexto = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
+        setTexto('previewVideoTitle', (data.tema || 'Video sin título'));
         setTexto('videoInfoTema', data.tema || 'Sin título');
         setTexto('videoMetaFecha', `📅 ${data.creado_en || '-'}`);
         setTexto('videoMetaTamano', `📦 ${data.tamano || '-'}`);
@@ -1116,7 +1094,7 @@ async function renderStoryboard(proyectoId) {
                 <div class="sc-image-wrap" style="aspect-ratio: ${ratio.replace(':', '/')};">
                     <img id="img-escena-${escena.numero}" src="${imgUrl}" 
                          onclick="window.open('${imgUrl}', '_blank')"
-                         onerror="this.src='https://via.placeholder.com/400x700?text=Cargar+imagen+de+escena'"
+                         onerror="this.src=IMAGEN_PLACEHOLDER"
                          loading="lazy">
                     <button class="btn-regenerar-mini" title="Regenerar esta imagen con IA" onclick="regenerarImagenOpciones('${proyectoId}', ${escena.numero})">
                         🔄
@@ -1432,11 +1410,11 @@ async function cargarEscenografias() {
                     transition: transform 0.2s, border-color 0.2s;
                 `;
 
-                const photoUrl = esc.imagen_path || 'https://via.placeholder.com/300x160?text=🏞️+Sin+Imagen';
+                const photoUrl = esc.imagen_path || AVATAR_PLACEHOLDER;
 
                 card.innerHTML = `
                     <div class="card-img-wrap" style="position:relative; height:150px; overflow:hidden; background:#000;">
-                        <img class="card-img" src="${photoUrl}" style="width:100%; height:100%; object-fit:cover;" onerror="this.src='https://via.placeholder.com/300x160?text=🏞️+Escenario'">
+                        <img class="card-img" src="${photoUrl}" style="width:100%; height:100%; object-fit:cover;" onerror="this.src=AVATAR_PLACEHOLDER">
                         <div class="card-labels" style="position:absolute; bottom:8px; left:8px; display:flex; gap:4px; flex-wrap:wrap;">
                             <span class="badge-tag" style="background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; font-size:0.68rem; color:#fff;">🌦️ ${esc.clima.toUpperCase()}</span>
                             <span class="badge-tag" style="background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; font-size:0.68rem; color:#fff;">⏰ ${esc.hora_dia.toUpperCase()}</span>
@@ -1498,7 +1476,7 @@ function renderCharacterList() {
             transition: border-color 0.2s;
         `;
 
-        const photoUrl = p.imagen_path || 'https://via.placeholder.com/40?text=👤';
+        const photoUrl = p.imagen_path || AVATAR_PLACEHOLDER;
 
         // Construir opciones del selector de voz
         const opcionesVoz = voces.map(v =>
@@ -1507,7 +1485,7 @@ function renderCharacterList() {
 
         card.innerHTML = `
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                <img src="${photoUrl}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid var(--borde);" onerror="this.src='https://via.placeholder.com/36?text=👤'">
+                <img src="${photoUrl}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid var(--borde);" onerror="this.src=AVATAR_PLACEHOLDER">
                 <div style="flex:1; overflow:hidden;">
                     <span style="display:block; color:var(--texto); font-size:0.85rem; font-weight:600;">${p.nombre}</span>
                     <span style="font-size:0.68rem; color:var(--texto-secundario); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.descripcion_fisica}</span>
