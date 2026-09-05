@@ -385,6 +385,35 @@ body::before {
     word-wrap: break-word;
 }
 
+/* Botón para volver a escuchar la respuesta dentro del mensaje */
+.mensaje-audio-acciones {
+    margin-top: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+}
+
+.btn-replay-audio {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid var(--azul-electrico);
+    border-radius: 20px;
+    color: var(--azul-electrico);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-replay-audio:hover {
+    background: var(--azul-electrico);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
 /* JSON blocks */
 .json-block {
     background: #0d1117;
@@ -1493,6 +1522,25 @@ textarea::placeholder {
 .btn-pause:hover {
     background: var(--azul-oscuro);
     transform: translateY(-1px);
+}
+
+.btn-repeat {
+    flex: 1;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: transparent;
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-repeat:hover {
+    border-color: var(--azul-electrico);
+    color: var(--azul-electrico);
+    background: var(--fondo-terciario);
 }
 
 .audio-status {

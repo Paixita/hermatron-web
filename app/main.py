@@ -1144,8 +1144,6 @@ async def chat(chat_request: ChatRequest):
             except Exception as e:
                 print(f"❌ [TOOL-FALLBACK ERROR] {e}")
 
-        await memoria.agregar_mensaje("assistant", respuesta, conversacion_id=chat_request.conversacion_id)
-
         audio_id, audio_gen = None, False
         if chat_request.generar_audio:
             try:
@@ -1164,6 +1162,9 @@ async def chat(chat_request: ChatRequest):
                 else:
                     print("❌ [AUDIO] Ningún motor de voz disponible — respuesta sin audio")
             except Exception as e: print(f"❌ [AUDIO ERROR]: {e}")
+
+        # Guardar la respuesta junto con su audio_id para poder volver a escucharla
+        await memoria.agregar_mensaje("assistant", respuesta, conversacion_id=chat_request.conversacion_id, audio_id=audio_id)
 
         return ChatResponse(respuesta=respuesta, audio_generado=audio_gen, audio_id=audio_id)
     except Exception as e:
@@ -1250,7 +1251,6 @@ Mientras tanto, puedo ayudarte si me describes la imagen."""
                 await memoria.crear_conversacion(conversacion_id, titulo)
                 
         await memoria.agregar_mensaje("user", f"[VISIÓN] {prompt}", modo, conversacion_id=conversacion_id)
-        await memoria.agregar_mensaje("assistant", respuesta, modo, conversacion_id=conversacion_id)
 
         # Audio
         audio_id = None
@@ -1266,6 +1266,9 @@ Mientras tanto, puedo ayudarte si me describes la imagen."""
                     audio_id = Path(archivo_audio).name
             except Exception as e:
                 print(f"⚠️ Error voz: {e}")
+
+        # Guardar la respuesta junto con su audio_id para poder volver a escucharla
+        await memoria.agregar_mensaje("assistant", respuesta, modo, conversacion_id=conversacion_id, audio_id=audio_id)
 
         return ChatResponse(respuesta=respuesta, audio_generado=bool(audio_id), audio_id=audio_id)
 

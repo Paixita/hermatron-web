@@ -29,9 +29,16 @@ class MemoriaDB:
                     content TEXT NOT NULL,
                     modo TEXT DEFAULT 'general',
                     proyecto TEXT DEFAULT NULL,
+                    audio_id TEXT DEFAULT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            
+            # Migración: agregar columna audio_id si la tabla ya existía (para volver a escuchar respuestas)
+            try:
+                await db.execute("ALTER TABLE chat_history ADD COLUMN audio_id TEXT DEFAULT NULL")
+            except Exception:
+                pass  # La columna ya existe
             
             # Tabla de proyectos
             await db.execute("""
@@ -290,14 +297,14 @@ class MemoriaDB:
             await db.commit()
         self._initialized = True
     
-    async def agregar_mensaje(self, role: str, content: str, modo: str = "general", proyecto: str = None, conversacion_id: str = "default"):
+    async def agregar_mensaje(self, role: str, content: str, modo: str = "general", proyecto: str = None, conversacion_id: str = "default", audio_id: str = None):
         """Guardar un mensaje en el historial con modo y proyecto"""
         await self.init()
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("UPDATE conversaciones SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (conversacion_id,))
             await db.execute(
-                "INSERT INTO chat_history (role, content, modo, proyecto, conversacion_id) VALUES (?, ?, ?, ?, ?)",
-                (role, content, modo, proyecto, conversacion_id)
+                "INSERT INTO chat_history (role, content, modo, proyecto, conversacion_id, audio_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (role, content, modo, proyecto, conversacion_id, audio_id)
             )
             await db.commit()
     
@@ -308,18 +315,18 @@ class MemoriaDB:
             db.row_factory = aiosqlite.Row
             if modo:
                 async with db.execute(
-                    "SELECT role, content, modo, proyecto, timestamp FROM chat_history WHERE modo = ? AND conversacion_id = ? ORDER BY id DESC LIMIT ?",
+                    "SELECT role, content, modo, proyecto, audio_id, timestamp FROM chat_history WHERE modo = ? AND conversacion_id = ? ORDER BY id DESC LIMIT ?",
                     (modo, conversacion_id, limit)
                 ) as cursor:
                     rows = await cursor.fetchall()
             else:
                 async with db.execute(
-                    "SELECT role, content, modo, proyecto, timestamp FROM chat_history WHERE conversacion_id = ? ORDER BY id DESC LIMIT ?",
+                    "SELECT role, content, modo, proyecto, audio_id, timestamp FROM chat_history WHERE conversacion_id = ? ORDER BY id DESC LIMIT ?",
                     (conversacion_id, limit)
                 ) as cursor:
                     rows = await cursor.fetchall()
             return [
-                {"role": row["role"], "content": row["content"], "modo": row["modo"], "proyecto": row["proyecto"], "timestamp": row["timestamp"]}
+                {"role": row["role"], "content": row["content"], "modo": row["modo"], "proyecto": row["proyecto"], "audio_id": row["audio_id"], "timestamp": row["timestamp"]}
                 for row in reversed(rows)
             ]
     

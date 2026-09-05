@@ -1139,7 +1139,8 @@ async function cargarUltimosMensajes() {
             if (welcomeMsg) welcomeMsg.style.display = 'none';
 
             for (const msg of data.ultimos_mensajes) {
-                agregarMensajeAlChat(msg.role === 'user' ? 'user' : 'agente', msg.content, false);
+                const audioUrlMsg = msg.audio_id ? `/api/audio/${msg.audio_id}` : null;
+                agregarMensajeAlChat(msg.role === 'user' ? 'user' : 'agente', msg.content, false, audioUrlMsg);
             }
             scrollToBottom();
         }
@@ -1225,7 +1226,7 @@ function formatearRespuesta(texto) {
 }
 
 // Agregar mensaje al chat
-function agregarMensajeAlChat(rol, contenido, animar = true) {
+function agregarMensajeAlChat(rol, contenido, animar = true, audioUrl = null) {
     // Ocultar bienvenida
     const welcomeMsg = document.getElementById('welcomeMessage');
     if (welcomeMsg) welcomeMsg.style.display = 'none';
@@ -1241,12 +1242,22 @@ function agregarMensajeAlChat(rol, contenido, animar = true) {
     const avatarIcon = rol === 'user' ? '👤' : '🅷';
     const nombreRol = rol === 'user' ? 'Tú' : 'HERMATRON';
 
+    // Botón para volver a escuchar la respuesta (solo mensajes del agente con audio)
+    const botonAudio = (rol === 'agente' && audioUrl)
+        ? `<div class="mensaje-audio-acciones">
+              <button class="btn-replay-audio" onclick="reproducirAudioDeMensaje('${String(audioUrl).replace(/'/g, "\\'")}')" title="Volver a escuchar la respuesta de HERMATRON">
+                  🔊 Volver a escuchar
+              </button>
+           </div>`
+        : '';
+
     msgDiv.innerHTML = `
         <div class="mensaje-header">
             <span class="mensaje-avatar">${avatarIcon}</span>
             <span class="mensaje-nombre">${nombreRol}</span>
         </div>
         <div class="mensaje-contenido">${formatearRespuesta(contenido)}</div>
+        ${botonAudio}
     `;
 
     chatContainer.appendChild(msgDiv);
@@ -1260,6 +1271,38 @@ function agregarMensajeAlChat(rol, contenido, animar = true) {
     }
 
     scrollToBottom();
+}
+
+// Reproducir (o volver a reproducir) el audio de una respuesta desde el mensaje
+function reproducirAudioDeMensaje(url) {
+    const audioPlayer = document.getElementById('audioPlayer');
+    const audioFlotante = document.getElementById('audioPlayerFlotante');
+    if (!audioPlayer || !audioFlotante) return;
+
+    audioPlayer.src = url;
+    audioFlotante.style.display = 'flex';
+
+    const btn = document.getElementById('btnPauseAudio');
+    const status = document.getElementById('audioStatus');
+    if (btn) btn.textContent = '⏸️ Pausar';
+    if (status) status.textContent = 'Reproduciendo...';
+
+    audioPlayer.currentTime = 0;
+    audioPlayer.play().catch(e => console.warn('Reproducción bloqueada:', e));
+}
+
+// Repetir la respuesta actual desde el reproductor flotante
+function repetirAudio() {
+    const audio = document.getElementById('audioPlayer');
+    if (!audio) return;
+
+    audio.currentTime = 0;
+    audio.play().catch(e => console.warn('Reproducción bloqueada:', e));
+
+    const btn = document.getElementById('btnPauseAudio');
+    const status = document.getElementById('audioStatus');
+    if (btn) btn.textContent = '⏸️ Pausar';
+    if (status) status.textContent = 'Reproduciendo...';
 }
 
 // Toggle panel lateral
@@ -1466,18 +1509,13 @@ async function enviar() {
             data = await response.json();
         }
 
-        // Mostrar respuesta
-        agregarMensajeAlChat('agente', data.respuesta);
+        // Mostrar respuesta (con su audio para poder volver a escucharla)
+        const audioUrlRespuesta = (data.audio_generado && data.audio_id) ? `/api/audio/${data.audio_id}` : null;
+        agregarMensajeAlChat('agente', data.respuesta, true, audioUrlRespuesta);
 
         // Reproducir audio si se generó
-        if (data.audio_generado && data.audio_id) {
-            const audioPlayer = document.getElementById('audioPlayer');
-            const audioFlotante = document.getElementById('audioPlayerFlotante');
-            if (audioPlayer && audioFlotante) {
-                audioPlayer.src = `/api/audio/${data.audio_id}`;
-                audioFlotante.style.display = 'flex';
-                audioPlayer.play().catch(e => console.warn('Autoplay blocked:', e));
-            }
+        if (audioUrlRespuesta) {
+            reproducirAudioDeMensaje(audioUrlRespuesta);
         }
 
     } catch (error) {
